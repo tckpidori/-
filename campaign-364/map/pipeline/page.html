@@ -1,0 +1,276 @@
+<title>Карта 365 года</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the map is the page; a narrow staff register (inspector, players, legend) sits beside it on wide screens and below it on phones. */
+:root{
+  --bg:#ebe5d8; --panel:#f6f2e9; --fg:#2a241d; --muted:#6f665a; --line:#cfc4b0;
+  --sea:#bfd0d4; --river:#6f98a3; --land:#e3d9c0; --coast:#6b604c; --grid:#aebfc3; --border:#4a4035;
+  --accent:#8c2f2a;
+  --fW:#c0433a; --fE:#7d4fae; --fG:#8a5a2c; --fT:#2f6cb3; --fH:#2b2727; --fP:#d9772a; --fA:#f3efe3; --fM:#cfa522; --fC:#3d8c52; --fN:#8f887a;
+  --display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#17150f; --panel:#201d16; --fg:#ebe3d2; --muted:#a2988a; --line:#39332a;
+  --sea:#1e2c33; --river:#4f8392; --land:#3e3a30; --coast:#b9ab8c; --grid:#2b3b42; --border:#d9cdb3;
+  --accent:#e36d62; --fA:#d9d2c0; --fH:#0b0b0b; --fN:#6b655a; --fW:#c84d43; --fE:#9466c6; --fT:#4a86cf; --fG:#a46f3b; --fC:#4ea266; --fM:#d9b02f; --fP:#e4873a; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#17150f; --panel:#201d16; --fg:#ebe3d2; --muted:#a2988a; --line:#39332a;
+  --sea:#1e2c33; --river:#4f8392; --land:#3e3a30; --coast:#b9ab8c; --grid:#2b3b42; --border:#d9cdb3;
+  --accent:#e36d62; --fA:#d9d2c0; --fH:#0b0b0b; --fN:#6b655a; --fW:#c84d43; --fE:#9466c6; --fT:#4a86cf; --fG:#a46f3b; --fC:#4ea266; --fM:#d9b02f; --fP:#e4873a; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 24px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:10px}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(26px,3.2vw,36px);margin:0;letter-spacing:.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:12px;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.mapbox{position:relative;border:1px solid var(--line);background:var(--sea);overflow:hidden;min-width:0;border-radius:3px;aspect-ratio:1.72;max-height:82vh;width:100%}
+.mapbox svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.mapbox svg:active{cursor:grabbing}
+.ctl{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:4px}
+.ctl button,.chip{font:500 13px var(--body);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:3px;cursor:pointer}
+.ctl button{width:30px;height:30px;line-height:1}
+.ctl button:hover,.chip:hover{border-color:var(--fg)}
+.ctl button:focus-visible,.chip:focus-visible,.pl:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.toggles{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{padding:5px 9px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.status{position:absolute;left:10px;bottom:8px;font:12px var(--mono);color:var(--muted);background:color-mix(in srgb,var(--panel) 85%,transparent);padding:2px 6px;border-radius:2px;pointer-events:none}
+
+aside{display:flex;flex-direction:column;gap:10px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:11px 13px}
+.card h2{font-family:var(--display);font-size:19px;font-weight:600;margin:0 0 6px}
+.eyebrow{font:500 11px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 3px}
+#info{min-height:150px}
+#info .name{font-family:var(--display);font-size:24px;font-weight:600;line-height:1.1;margin:0}
+#info .city{font-size:15px;margin:2px 0 8px}
+#info .city span{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:6px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px;margin:0}
+.kv dt{color:var(--muted)}.kv dd{margin:0}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.25)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:12.5px}
+.plist{display:grid;grid-template-columns:1fr;gap:1px;margin:0;padding:0;list-style:none}
+.pl{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:center;width:100%;text-align:left;padding:3px 6px;border:1px solid transparent;border-radius:3px;background:none;color:var(--fg);font:inherit;cursor:pointer}
+.pl:hover{background:var(--bg);border-color:var(--line)}
+.pl.on{border-color:var(--fg)}
+.pl .n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:600 11px var(--mono);color:#fff;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+.pl .n.light{color:#2b2620}
+.pl .t{font-size:13px;line-height:1.15}.pl .t small{display:block;color:var(--muted);font-size:11.5px}
+.note{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+svg text{font-family:var(--body);pointer-events:none;user-select:none}
+.reg{cursor:pointer}
+.reg:hover{filter:brightness(1.07)}
+.rname{font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;fill:var(--border);opacity:.75}
+</style>
+
+<header>
+  <h1>Карта 365 года</h1>
+  <div class="sub">Одна область, один город. Контуры провинций по данным Ancient World Mapping Center, берега и реки по Natural Earth. Колесо и перетаскивание: масштаб и сдвиг.</div>
+</header>
+
+<div class="wrap">
+  <div class="mapbox" id="mapbox">
+    <svg id="map" role="img" aria-label="Карта римского мира и соседей в 365 году" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="ctl">
+      <button id="zin" title="Приблизить" aria-label="Приблизить">+</button>
+      <button id="zout" title="Отдалить" aria-label="Отдалить">−</button>
+      <button id="zreset" title="Сбросить вид" aria-label="Сбросить вид">⌂</button>
+    </div>
+    <div class="toggles">
+      <button class="chip" id="tLabels" aria-pressed="false">Все подписи</button>
+      <button class="chip" id="tBorders" aria-pressed="true">Границы областей</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <aside>
+    <div class="card" id="info"></div>
+    <div class="card">
+      <h2>Игроки, лето 365</h2>
+      <ul class="plist" id="plist"></ul>
+      <p class="note">Прокопий показан условно: в игре его стартовая локация тайная.</p>
+    </div>
+    <div class="card">
+      <h2>Легенда</h2>
+      <div class="legend" id="legend"></div>
+      <p class="note">Цвет области: кто её контролирует. Нумерованный маркер: старт игрока. Толстая линия: граница между фракциями.</p>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>__TOPO__</script>
+<script>__GEO__</script>
+<script>
+const R = __R__;
+const PLAYERS = [
+ {n:1, name:"Валентиниан", title:"Augustus, император Запада", f:"W", city:"Mediolanum"},
+ {n:2, name:"Иовин", title:"Magister Equitum per Gallias", f:"W", city:"Augusta Treverorum"},
+ {n:3, name:"Феодосий", title:"Comes Hispaniarum", f:"W", city:"Emerita Augusta"},
+ {n:4, name:"Валент", title:"Augustus, император Востока", f:"E", city:"Constantinopolis"},
+ {n:5, name:"Лупицин", title:"Magister Equitum per Orientem", f:"E", city:"Antiochia"},
+ {n:6, name:"Прокопий", title:"Usurpator, убежище (тайно)", f:"E", city:"Chersonesus", secret:true},
+ {n:7, name:"Макриан", title:"Rex Alamannorum", f:"G", city:"Aquae Mattiacorum"},
+ {n:8, name:"Маллобауд", title:"Rex Francorum", f:"G", city:"Toxandria"},
+ {n:9, name:"Эрманарих", title:"Rex Gothorum (гревтунги)", f:"T", city:"Árheimar"},
+ {n:10, name:"Атанарих", title:"Iudex Tervingorum", f:"T", city:"Malva"},
+ {n:11, name:"Баламбер", title:"Rex Hunnorum", f:"H", city:"Atil"},
+ {n:12, name:"Шапур II", title:"Šāhān šāh", f:"P", city:"Ctesiphon"},
+ {n:13, name:"Аршак II", title:"Thagavor Hayots", f:"A", city:"Dvin"},
+ {n:14, name:"Нубель", title:"Regulus Maurorum", f:"M", city:"Caesarea"},
+ {n:15, name:"Кримтанн мак Фидах", title:"Rí Érenn", f:"C", city:"Caisel"},
+];
+const FNAME = {W:"Запад (Валентиниан)",E:"Восток (Валент)",G:"Германцы",T:"Готы",H:"Гунны",P:"Иран",A:"Армения",M:"Мавры",C:"Кельты",N:"Прочие народы и клиенты",X:"Вне игры"};
+const FVAR = {W:"--fW",E:"--fE",G:"--fG",T:"--fT",H:"--fH",P:"--fP",A:"--fA",M:"--fM",C:"--fC",N:"--fN"};
+const LIGHT = f => f==="A" || f==="M";
+
+// ---------- side register ----------
+const plist = document.getElementById("plist");
+PLAYERS.forEach(p => {
+  const li = document.createElement("li");
+  const b = document.createElement("button"); b.className="pl"; b.id="pl"+p.n; b.type="button";
+  b.innerHTML = `<span class="n ${LIGHT(p.f)?'light':''}" style="background:var(${FVAR[p.f]})">${p.n}</span><span class="t">${p.name}<small>${p.title}</small></span>`;
+  b.addEventListener("click", () => { const i = R.findIndex(r => r.la===p.city); select(i); flyTo(i); });
+  li.appendChild(b); plist.appendChild(li);
+});
+const legend = document.getElementById("legend");
+Object.keys(FNAME).forEach(k => {
+  const d = document.createElement("div");
+  d.innerHTML = k==="X" ? `<span class="sw" style="background:var(--land)"></span>${FNAME[k]}` : `<span class="sw" style="background:var(${FVAR[k]})"></span>${FNAME[k]}`;
+  legend.appendChild(d);
+});
+
+// ---------- map ----------
+const svg = d3.select("#map"), status = document.getElementById("status");
+let selected = -1, zoomK = 1, showAll = false, flyTo = ()=>{}, select = ()=>{};
+(function main(){
+  const T = window.TOPO, S = T.S, L0 = T.L0, B1 = T.B1;
+  const ring = []; const FL0=-13, FL1=51.5, FB0=23.5, FB1=60;
+  for (let y=FB0; y<FB1; y+=1) ring.push([FL0,y]); for (let x=FL0; x<FL1; x+=1) ring.push([x,FB1]);
+  for (let y=FB1; y>FB0; y-=1) ring.push([FL1,y]); for (let x=FL1; x>FL0; x-=1) ring.push([x,FB0]); ring.push([FL0,FB0]);
+  const frame = {type:"Polygon", coordinates:[ring]};
+  const proj = d3.geoConicConformal().parallels([27,48]).rotate([-19,0]).fitSize([1400,900], frame);
+  const path = d3.geoPath(proj);
+  // crop the conic trapezoid to a rectangle: the cut corners hold only open ocean and desert
+  const fb = path.bounds(frame);
+  const x0 = proj([FL0,37])[0], x1 = proj([FL1,37])[0];
+  const y0 = fb[0][1], y1 = fb[1][1]; const W = x1-x0, H = y1-y0;
+  svg.attr("viewBox", `${x0} ${y0} ${W} ${H}`);
+  document.getElementById("mapbox").style.aspectRatio = (W/H).toFixed(3);
+
+  // decode arcs: corner grid (j,i) -> lon/lat -> projected
+  const arcs = T.arcs.map(a => { let x=a[0][0], y=a[0][1]; const out=[proj([L0+(x-1)*S, B1-(y-1)*S])];
+    for (let k=1;k<a.length;k++){ x+=a[k][0]; y+=a[k][1]; out.push(proj([L0+(x-1)*S, B1-(y-1)*S])); } return out; });
+  const fmt = p => p[0].toFixed(1)+","+p[1].toFixed(1);
+  const ringPath = ring => { let d="", first=true; ring.forEach(ref => { const a = ref>=0 ? arcs[ref] : arcs[~ref].slice().reverse();
+    for (let k = first?0:1; k<a.length; k++){ d += (first&&k===0 ? "M" : "L") + fmt(a[k]); } first=false; }); return d+"Z"; };
+  const regPath = {}; Object.keys(T.regions).forEach(k => regPath[k] = T.regions[k].map(ringPath).join(""));
+  const arcPath = a => "M"+a.map(fmt).join("L");
+
+  svg.append("rect").attr("x",x0).attr("y",y0).attr("width",W).attr("height",H).style("fill","var(--sea)");
+  const defs = svg.append("defs");
+  defs.append("clipPath").attr("id","clipFrame").append("rect").attr("x",x0).attr("y",y0).attr("width",W).attr("height",H);
+  const g = svg.append("g").attr("clip-path","url(#clipFrame)").append("g");
+  g.append("path").datum(d3.geoGraticule().step([5,5])).attr("d", path).attr("fill","none").style("stroke","var(--grid)").attr("stroke-width",.6).attr("vector-effect","non-scaling-stroke");
+  // base land beyond the playable frame (plain, no regions)
+  g.append("path").attr("d", path(window.GEO.land)).style("fill","var(--land)").style("stroke","var(--coast)").attr("stroke-width",.6).attr("stroke-opacity",.6).attr("vector-effect","non-scaling-stroke");
+  g.append("path").attr("d", path(window.GEO.lakes)).style("fill","var(--sea)");
+
+  // regions
+  const ids = Object.keys(regPath).map(Number);
+  const gR = g.append("g");
+  const regs = gR.selectAll("path").data(ids).join("path")
+    .attr("class", i => R[i].f==="X" ? "wild" : "reg")
+    .attr("d", i => regPath[i])
+    .attr("fill-rule","evenodd")
+    .style("fill", i => { const f = R[i].f; if (f==="X") return "var(--land)";
+      const mix = [50,58,66][(i*7)%3]; return `color-mix(in oklab, var(${FVAR[f]}) ${mix}%, var(--land))`; })
+    .on("pointerenter", (e,i) => { if (R[i].f!=="X") show(i); })
+    .on("pointerleave", () => { if (selected>=0) show(selected); })
+    .on("click", (e,i) => { if (R[i].f!=="X") select(i); });
+
+  // rivers
+  g.append("path").attr("d", path(window.GEO.rivers)).attr("fill","none").style("stroke","var(--river)").attr("stroke-width",1).attr("stroke-linejoin","round").attr("stroke-linecap","round").attr("vector-effect","non-scaling-stroke").attr("pointer-events","none");
+
+  // borders: inner (same faction), faction, coast
+  let dIn="", dFac="", dCoast="";
+  T.meta.forEach(([l,r],k) => { const a = arcs[k];
+    if (l===-2 || r===-2) return;
+    if (l===-1 || r===-1) { dCoast += arcPath(a); return; }
+    const fl = R[l].f, fr = R[r].f;
+    if (fl==="X" && fr==="X") return;
+    if (fl===fr) dIn += arcPath(a); else dFac += arcPath(a); });
+  const gB = g.append("g").attr("pointer-events","none").attr("fill","none").attr("stroke-linejoin","round");
+  gB.append("path").attr("id","inner").attr("d", dIn).style("stroke","var(--border)").attr("stroke-opacity",.6).attr("stroke-width",.7).attr("vector-effect","non-scaling-stroke");
+  gB.append("path").attr("d", dFac).style("stroke","var(--border)").attr("stroke-opacity",.9).attr("stroke-width",1.5).attr("vector-effect","non-scaling-stroke");
+  gB.append("path").attr("d", dCoast).style("stroke","var(--coast)").attr("stroke-width",.8).attr("vector-effect","non-scaling-stroke");
+  const hl = gB.append("path").attr("id","hl").style("stroke","var(--accent)").attr("stroke-width",2.2).attr("vector-effect","non-scaling-stroke").attr("fill-rule","evenodd");
+
+  // cities, markers, labels
+  const pts = R.map(r => proj([r.lon, r.lat]));
+  const startOf = {}; PLAYERS.forEach(p => { startOf[R.findIndex(r=>r.la===p.city)] = p; });
+  const real = ids.filter(i => R[i].f!=="X");
+  const gC = g.append("g").attr("pointer-events","none");
+  const rnames = gC.selectAll("text.rname").data(real.filter(i => T.anchors[i] && T.anchors[i][2] > 900)).join("text").attr("class","rname")
+    .attr("text-anchor","middle").attr("x", i => proj([T.anchors[i][0], T.anchors[i][1]])[0]).attr("y", i => proj([T.anchors[i][0], T.anchors[i][1]])[1])
+    .text(i => R[i].region.replace(/\s*\(.*\)/,""));
+  const dots = gC.selectAll("circle.city").data(real.filter(i=>!startOf[i])).join("circle").attr("class","city")
+    .attr("cx", i=>pts[i][0]).attr("cy", i=>pts[i][1]).style("fill","var(--fg)").style("stroke","var(--panel)").attr("stroke-width",1).attr("vector-effect","non-scaling-stroke");
+  const marks = gC.selectAll("g.mark").data(real.filter(i=>startOf[i])).join("g").attr("class","mark").attr("transform", i=>`translate(${pts[i][0]},${pts[i][1]})`);
+  marks.append("circle").attr("class","mk").style("fill", i=>`var(${FVAR[startOf[i].f]})`).style("stroke","var(--panel)").attr("stroke-width",1.5)
+    .attr("stroke-dasharray", i => startOf[i].secret ? "2 2" : null).attr("vector-effect","non-scaling-stroke");
+  marks.append("text").attr("class","mkn").attr("text-anchor","middle").attr("dominant-baseline","central").attr("font-weight",600)
+    .attr("fill", i => LIGHT(startOf[i].f) ? "#2b2620" : "#fff").text(i=>startOf[i].n);
+  const labels = gC.selectAll("text.lab").data(real).join("text").attr("class","lab")
+    .attr("x", i=>pts[i][0]).attr("y", i=>pts[i][1]).style("fill","var(--fg)").style("stroke","var(--land)").attr("stroke-width",2.5).attr("paint-order","stroke").attr("stroke-linejoin","round")
+    .attr("font-weight", i => R[i].rank===1 ? 600 : 400).text(i => R[i].city);
+
+  function resize(){
+    const k = zoomK;
+    dots.attr("r", 2.4/k);
+    marks.select(".mk").attr("r", 7.5/k); marks.select(".mkn").attr("font-size", 9/k);
+    labels.attr("font-size", i => (R[i].rank===1 ? 11.5 : 10)/k)
+      .attr("text-anchor", i => R[i].lp ? "middle" : null)
+      .attr("dx", i => R[i].lp ? 0 : (startOf[i] ? 9.5 : 4.5)/k)
+      .attr("dy", i => R[i].lp==="below" ? (startOf[i] ? 19 : 13)/k : R[i].lp==="above" ? (startOf[i] ? -11 : -7)/k : (startOf[i] ? 3.5 : 3)/k)
+      .attr("display", i => (R[i].rank===1 || showAll || k>=1.7) ? null : "none");
+    rnames.attr("font-size", 8.5/k).attr("dy", -7/k).attr("display", (k>=2.3 || showAll) ? null : "none");
+    status.textContent = `масштаб ×${k.toFixed(1)} · ${real.length} областей · ${PLAYERS.length} игроков`;
+  }
+  const zoom = d3.zoom().scaleExtent([1, 16]).translateExtent([[x0,y0],[x1,y1]]).extent([[x0,y0],[x1,y1]])
+    .on("zoom", ev => { g.attr("transform", ev.transform); zoomK = ev.transform.k; resize(); });
+  svg.call(zoom);
+  document.getElementById("zin").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.6);
+  document.getElementById("zout").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1/1.6);
+  document.getElementById("zreset").onclick = () => svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity);
+  const tL = document.getElementById("tLabels"); tL.onclick = () => { showAll = !showAll; tL.setAttribute("aria-pressed", showAll); resize(); };
+  const tB = document.getElementById("tBorders"); tB.onclick = () => { const on = tB.getAttribute("aria-pressed")!=="true"; tB.setAttribute("aria-pressed", on); d3.select("#inner").attr("display", on?null:"none"); };
+
+  flyTo = i => { const k = 4, [cx,cy] = pts[i];
+    svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(x0+W/2, y0+H/2).scale(k).translate(-cx,-cy)); };
+  select = i => { selected = i; show(i);
+    document.querySelectorAll(".pl").forEach(b=>b.classList.remove("on")); const p = startOf[i]; if (p) document.getElementById("pl"+p.n).classList.add("on"); };
+  function show(i){
+    const r = R[i], p = startOf[i];
+    hl.attr("d", regPath[i] || "");
+    const area = T.anchors[i] ? Math.round(T.anchors[i][2]*4.84*Math.cos(r.lat*Math.PI/180)/1000)*1000 : null; // 0.02° cell ≈ 2.2 km × 2.2 km·cos φ
+    document.getElementById("info").innerHTML = `
+      <p class="eyebrow">Область</p>
+      <p class="name">${r.region}</p>
+      <p class="city">${r.city}<span>${r.la}</span></p>
+      <dl class="kv">
+        <dt>Контроль</dt><dd><span class="sw" style="background:var(${FVAR[r.f]})"></span>${FNAME[r.f]}</dd>
+        <dt>Старт</dt><dd>${p ? `№${p.n} ${p.name}, ${p.title}` : "нет игрока"}</dd>
+        <dt>Площадь</dt><dd>${area ? "≈ "+area.toLocaleString("ru-RU")+" км²" : "—"}</dd>
+        <dt>Координаты</dt><dd style="font-family:var(--mono);font-size:12px">${r.lat.toFixed(2)}° N, ${r.lon.toFixed(2)}° E</dd>
+      </dl>`;
+  }
+  resize();
+  select(R.findIndex(r=>r.la==="Roma"));
+})();
+</script>
