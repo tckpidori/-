@@ -98,7 +98,7 @@ svg text{font-family:var(--body);pointer-events:none;user-select:none}
     <div class="card">
       <h2>Легенда</h2>
       <div class="legend" id="legend"></div>
-      <p class="note">Цвет области: кто её контролирует. Нумерованный маркер: старт игрока. Толстая линия: граница между фракциями.</p>
+      <p class="note">Цвет области: кто её контролирует. Нумерованный маркер: старт игрока. Толстая линия: граница между фракциями. Пунктир: предел освоенных земель.</p>
     </div>
   </aside>
 </div>
@@ -141,7 +141,7 @@ PLAYERS.forEach(p => {
 const legend = document.getElementById("legend");
 Object.keys(FNAME).forEach(k => {
   const d = document.createElement("div");
-  d.innerHTML = k==="X" ? `<span class="sw" style="background:var(--land)"></span>${FNAME[k]}` : `<span class="sw" style="background:var(${FVAR[k]})"></span>${FNAME[k]}`;
+  d.innerHTML = k==="X" ? `<span class="sw" style="background:var(--land)"></span>Ничья земля` : `<span class="sw" style="background:var(${FVAR[k]})"></span>${FNAME[k]}`;
   legend.appendChild(d);
 });
 
@@ -164,8 +164,12 @@ let selected = -1, zoomK = 1, showAll = false, flyTo = ()=>{}, select = ()=>{};
   document.getElementById("mapbox").style.aspectRatio = (W/H).toFixed(3);
 
   // decode arcs: corner grid (j,i) -> lon/lat -> projected
+  // corner-chopping (Chaikin) smoothing with fixed endpoints keeps shared arcs matching between neighbours
+  const chaikin = (pts, it) => { for (let n=0;n<it;n++){ if (pts.length<3) break; const out=[pts[0]];
+    for (let i=0;i<pts.length-1;i++){ const p=pts[i], q=pts[i+1]; out.push([.75*p[0]+.25*q[0], .75*p[1]+.25*q[1]]); out.push([.25*p[0]+.75*q[0], .25*p[1]+.75*q[1]]); }
+    out.push(pts[pts.length-1]); pts=out; } return pts; };
   const arcs = T.arcs.map(a => { let x=a[0][0], y=a[0][1]; const out=[proj([L0+(x-1)*S, B1-(y-1)*S])];
-    for (let k=1;k<a.length;k++){ x+=a[k][0]; y+=a[k][1]; out.push(proj([L0+(x-1)*S, B1-(y-1)*S])); } return out; });
+    for (let k=1;k<a.length;k++){ x+=a[k][0]; y+=a[k][1]; out.push(proj([L0+(x-1)*S, B1-(y-1)*S])); } return chaikin(out, 2); });
   const fmt = p => p[0].toFixed(1)+","+p[1].toFixed(1);
   const ringPath = ring => { let d="", first=true; ring.forEach(ref => { const a = ref>=0 ? arcs[ref] : arcs[~ref].slice().reverse();
     for (let k = first?0:1; k<a.length; k++){ d += (first&&k===0 ? "M" : "L") + fmt(a[k]); } first=false; }); return d+"Z"; };
@@ -185,27 +189,28 @@ let selected = -1, zoomK = 1, showAll = false, flyTo = ()=>{}, select = ()=>{};
   const ids = Object.keys(regPath).map(Number);
   const gR = g.append("g");
   const regs = gR.selectAll("path").data(ids).join("path")
-    .attr("class", i => R[i].f==="X" ? "wild" : "reg")
+    .attr("class","reg")
     .attr("d", i => regPath[i])
     .attr("fill-rule","evenodd")
-    .style("fill", i => { const f = R[i].f; if (f==="X") return "var(--land)";
+    .style("fill", i => { const f = R[i].f;
       const mix = [50,58,66][(i*7)%3]; return `color-mix(in oklab, var(${FVAR[f]}) ${mix}%, var(--land))`; })
-    .on("pointerenter", (e,i) => { if (R[i].f!=="X") show(i); })
+    .on("pointerenter", (e,i) => show(i))
     .on("pointerleave", () => { if (selected>=0) show(selected); })
-    .on("click", (e,i) => { if (R[i].f!=="X") select(i); });
+    .on("click", (e,i) => select(i));
 
   // rivers
   g.append("path").attr("d", path(window.GEO.rivers)).attr("fill","none").style("stroke","var(--river)").attr("stroke-width",1).attr("stroke-linejoin","round").attr("stroke-linecap","round").attr("vector-effect","non-scaling-stroke").attr("pointer-events","none");
 
   // borders: inner (same faction), faction, coast
-  let dIn="", dFac="", dCoast="";
+  let dIn="", dFac="", dCoast="", dLim="";
   T.meta.forEach(([l,r],k) => { const a = arcs[k];
     if (l===-2 || r===-2) return;
-    if (l===-1 || r===-1) { dCoast += arcPath(a); return; }
+    if (l===-1 || r===-1) { if (l>=0 || r>=0) dCoast += arcPath(a); return; }
+    if (l===-3 || r===-3) { dLim += arcPath(a); return; }
     const fl = R[l].f, fr = R[r].f;
-    if (fl==="X" && fr==="X") return;
     if (fl===fr) dIn += arcPath(a); else dFac += arcPath(a); });
   const gB = g.append("g").attr("pointer-events","none").attr("fill","none").attr("stroke-linejoin","round");
+  gB.append("path").attr("d", dLim).style("stroke","var(--border)").attr("stroke-opacity",.55).attr("stroke-width",.9).attr("stroke-dasharray","3 3").attr("vector-effect","non-scaling-stroke");
   gB.append("path").attr("id","inner").attr("d", dIn).style("stroke","var(--border)").attr("stroke-opacity",.6).attr("stroke-width",.7).attr("vector-effect","non-scaling-stroke");
   gB.append("path").attr("d", dFac).style("stroke","var(--border)").attr("stroke-opacity",.9).attr("stroke-width",1.5).attr("vector-effect","non-scaling-stroke");
   gB.append("path").attr("d", dCoast).style("stroke","var(--coast)").attr("stroke-width",.8).attr("vector-effect","non-scaling-stroke");
@@ -214,7 +219,7 @@ let selected = -1, zoomK = 1, showAll = false, flyTo = ()=>{}, select = ()=>{};
   // cities, markers, labels
   const pts = R.map(r => proj([r.lon, r.lat]));
   const startOf = {}; PLAYERS.forEach(p => { startOf[R.findIndex(r=>r.la===p.city)] = p; });
-  const real = ids.filter(i => R[i].f!=="X");
+  const real = ids;
   const gC = g.append("g").attr("pointer-events","none");
   const rnames = gC.selectAll("text.rname").data(real.filter(i => T.anchors[i] && T.anchors[i][2] > 900)).join("text").attr("class","rname")
     .attr("text-anchor","middle").attr("x", i => proj([T.anchors[i][0], T.anchors[i][1]])[0]).attr("y", i => proj([T.anchors[i][0], T.anchors[i][1]])[1])

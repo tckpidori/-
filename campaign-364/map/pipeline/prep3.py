@@ -1,6 +1,6 @@
 import numpy as np, json, sys, math
-lab=np.load('lab.npy'); R=json.load(open('regions.json'))
-H,W=lab.shape; S=0.02; L0,B1=-13.0,60.0
+lab=np.load('lab.npy'); R=json.load(open('regions_used.json'))
+H,W=lab.shape; S=0.02; L0,B1=-16.0,62.0
 P=np.full((H+2,W+2),-2,dtype=np.int32); P[1:-1,1:-1]=lab
 CW=W+3  # corner grid width
 def node(i,j): return i*CW+j
