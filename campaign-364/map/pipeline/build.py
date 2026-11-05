@@ -19,7 +19,7 @@ KIND={int(p):kind(int(p)) for p in ids}
 # ---- base groups: (duchy, region) for land ----
 CITYP={p:i for i,(nm,p) in enumerate(cityb.items())}
 cnames=list(cityb.keys())
-EXTRA={'Roma':[2577,2574]}   # Vaticano and Paterno join Rome
+EXTRA={}
 for nm,lst in EXTRA.items():
     for p in lst: CITYP[p]=cnames.index(nm)
 grp_of={}; groups=[]
@@ -179,6 +179,31 @@ for _ in range(400):
         sh=np.roll(U,(dy,dx),axis=(0,1)); m=(U==-7)&(sh>=0)&(sh<NP); U[m]=sh[m]
 U[U==-7]=-4
 print('mountain px absorbed',int(mm.sum()),file=sys.stderr)
+# Rome: grow its own barony shape evenly outward (an offset of its outline) to about 3x area
+def offset_grow(u, factor, keep_from):
+    m=(U==u); a0=int(m.sum()); target=int(a0*(factor-1))
+    allowed=(U>=0)&(U<NP)
+    for v in keep_from:                       # stay 4 px clear of these cities
+        o=(U==v); b_=o.copy()
+        for dy in range(-4,5):
+            for dx in range(-4,5):
+                if dy*dy+dx*dx<=16: b_|=np.roll(o,(dy,dx),axis=(0,1))
+        allowed&=~b_
+    lab=np.where(allowed|m,0,-1).astype(np.int32)
+    edge=m&~(np.roll(m,1,0)&np.roll(m,-1,0)&np.roll(m,1,1)&np.roll(m,-1,1))
+    si,sj=np.nonzero(edge)
+    lab.tofile('_cm.bin'); np.ones(U.shape,np.float32).tofile('_cost.bin')
+    with open('_src.bin','wb') as fh:
+        fh.write(struct.pack('i',len(si)))
+        for i,j in zip(si.tolist(),sj.tolist()): fh.write(struct.pack('iif',i*W+j,0,1e9))
+    subprocess.run(['./grow2',str(W),str(H),'0','0.000001','_cm.bin','_cost.bin','_src.bin','_own.bin','_dist.bin'],check=True)
+    dist=np.fromfile('_dist.bin',dtype=np.float32).reshape(U.shape)
+    for s_ in ('cm','cost','src','own','dist'): os.remove(f'_{s_}.bin')
+    cand=allowed&~m&(dist<1e29)
+    d=np.sort(dist[cand]); thr=d[min(target,len(d)-1)]
+    U[cand&(dist<=thr)]=u
+    print('grown',cnames[u-NP],a0,'->',int((U==u).sum()),'offset px',round(float(thr),1),file=sys.stderr)
+offset_grow(NP+cnames.index('Roma'),3.0,[NP+cnames.index('Ostia')])
 np.save('U.npy',U)
 prov_reg=[g['r'] for g in prov]
 city_reg=[creg[bar[cityb[n]]['c']] for n in cnames]
