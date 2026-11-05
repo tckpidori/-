@@ -203,7 +203,104 @@ def offset_grow(u, factor, keep_from):
     d=np.sort(dist[cand]); thr=d[min(target,len(d)-1)]
     U[cand&(dist<=thr)]=u
     print('grown',cnames[u-NP],a0,'->',int((U==u).sum()),'offset px',round(float(thr),1),file=sys.stderr)
-offset_grow(NP+cnames.index('Roma'),3.0,[NP+cnames.index('Ostia')])
+# ---- city sizes by importance in 365 (area in CK3 px) ----
+TIER={1:1000,2:620,3:340,4:170}
+T1={'Roma','Nova Roma'}
+T2={'Mediolanum','Augusta Treverorum','Carthago','Aquileia','Sirmium','Thessalonica','Lugdunum','Arelate'}
+T3={'Londinium','Eboracum','Colonia Agrippina','Mogontiacum','Burdigala','Narbo Martius','Vienna','Tarraco','Corduba','Hispalis','Emerita Augusta',
+ 'Carthago Nova','Caesaraugusta','Olisipo','Iol Caesarea','Cirta','Hippo Regius','Hadrumetum','Leptis Magna','Ravenna','Verona','Patavium','Neapolis',
+ 'Syracusae','Panormus','Salona','Serdica','Naissus','Viminacium','Marcianopolis','Philippopolis','Hadrianopolis','Athenae','Corinthus','Dyrrachium',
+ 'Durocortorum','Augusta Vindelicum','Argentoratum','Ticinum','Brundisium','Caralis','Aquincum'}
+def tier(n): return 1 if n in T1 else 2 if n in T2 else 3 if n in T3 else 4
+def dist_from(lab_ok, seeds_mask):
+    lab=np.where(lab_ok,0,-1).astype(np.int32); si,sj=np.nonzero(seeds_mask)
+    lab.tofile('_cm.bin'); np.ones(U.shape,np.float32).tofile('_cost.bin')
+    with open('_src.bin','wb') as fh:
+        fh.write(struct.pack('i',len(si)))
+        for i,j in zip(si.tolist(),sj.tolist()): fh.write(struct.pack('iif',i*W+j,0,1e9))
+    subprocess.run(['./grow2',str(W),str(H),'0','0.000001','_cm.bin','_cost.bin','_src.bin','_own.bin','_dist.bin'],check=True)
+    d=np.fromfile('_dist.bin',dtype=np.float32).reshape(U.shape)
+    for s_ in ('cm','cost','src','own','dist'): os.remove(f'_{s_}.bin')
+    return d
+def nb4(m): return np.roll(m,1,0)|np.roll(m,-1,0)|np.roll(m,1,1)|np.roll(m,-1,1)
+WATER=(U==-9)|(U==-5)|(U==-3)
+def shrink(u,target):
+    m=(U==u); 
+    if m.sum()<=target: return
+    landedge=m&nb4((~m)&~WATER)             # edges toward land only: the coast stays
+    if not landedge.any(): landedge=m&nb4(~m)
+    d=dist_from(m,landedge); v=np.sort(d[m])[::-1]; thr=v[min(target,len(v)-1)]
+    keep=m&(d>=thr); U[m&~keep]=-8
+def grow_to(u,target,buffer_ids):
+    m=(U==u); need=target-int(m.sum())
+    if need<=0: return
+    allowed=(U>=0)&(U<NP)
+    for v in buffer_ids:
+        o=(U==v)
+        if not o.any(): continue
+        ys,xs=np.nonzero(o); y0,y1,x0,x1=max(0,ys.min()-5),ys.max()+6,max(0,xs.min()-5),xs.max()+6
+        sub=o[y0:y1,x0:x1]; b_=sub.copy()
+        for dy in range(-4,5):
+            for dx in range(-4,5):
+                if dy*dy+dx*dx<=16: b_|=np.roll(sub,(dy,dx),axis=(0,1))
+        allowed[y0:y1,x0:x1]&=~b_
+    edge=m&nb4(~m); d=dist_from(allowed|m,edge)
+    cand=allowed&~m&(d<1e29); v=np.sort(d[cand])
+    if len(v)==0: return
+    thr=v[min(need,len(v)-1)]; U[cand&(d<=thr)]=u
+cids=[NP+i for i in range(len(cnames))]
+before={cnames[u-NP]:int((U==u).sum()) for u in cids}
+for u in cids: shrink(u,TIER[tier(cnames[u-NP])])
+# freed pixels go back to the surrounding province
+for _ in range(60):
+    t=U==-8
+    if not t.any(): break
+    for dy,dx in ((0,1),(0,-1),(1,0),(-1,0)):
+        sh=np.roll(U,(dy,dx),axis=(0,1)); mm=(U==-8)&(sh>=0)&(sh<NP); U[mm]=sh[mm]
+U[U==-8]=-4
+for u in sorted(cids,key=lambda u:-TIER[tier(cnames[u-NP])]):
+    grow_to(u,TIER[tier(cnames[u-NP])],[v for v in cids if v!=u])
+# one solid piece per city, and a gap between neighbouring cities
+def components(mask):
+    ys,xs=np.nonzero(mask); y0,x0=ys.min(),xs.min(); hh,ww=ys.max()-y0+1,xs.max()-x0+1
+    win=np.zeros((hh,ww),np.uint8); win[ys-y0,xs-x0]=1
+    lab=np.frombuffer(subprocess.run(['./label',str(ww),str(hh)],input=win.tobytes(),capture_output=True).stdout,dtype=np.int32).reshape(hh,ww)
+    return ys,xs,lab[ys-y0,xs-x0]
+size_={u:TIER[tier(cnames[u-NP])] for u in cids}
+for u in cids:
+    m=U==u
+    if not m.any(): continue
+    ys,xs,l=components(m); vals,cn=np.unique(l,return_counts=True); big=vals[cn.argmax()]
+    U[ys[l!=big],xs[l!=big]]=-8
+iscity=(U>=NP)
+for dy in range(-2,3):
+    for dx in range(-2,3):
+        if dy*dy+dx*dx>4: continue
+        sh=np.roll(U,(dy,dx),axis=(0,1))
+        clash=iscity&(sh>=NP)&(sh!=U)
+        if clash.any():
+            a_=np.array([size_.get(int(v),0) for v in U[clash]]); b_=np.array([size_.get(int(v),0) for v in sh[clash]])
+            ys,xs=np.nonzero(clash); lose=(a_>b_)|((a_==b_)&(U[clash]>sh[clash]))
+            U[ys[lose],xs[lose]]=-8; iscity=(U>=NP)
+for _ in range(60):
+    t=U==-8
+    if not t.any(): break
+    for dy,dx in ((0,1),(0,-1),(1,0),(-1,0)):
+        sh=np.roll(U,(dy,dx),axis=(0,1)); mm=(U==-8)&(sh>=0)&(sh<NP); U[mm]=sh[mm]
+U[U==-8]=-4
+for u in cids:      # the gap may have split a city: keep its largest piece again
+    m=U==u
+    if not m.any(): continue
+    ys,xs,l=components(m); vals,cn=np.unique(l,return_counts=True); big=vals[cn.argmax()]
+    for y,x in zip(ys[l!=big],xs[l!=big]):
+        for dy,dx in ((0,1),(0,-1),(1,0),(-1,0)):
+            v=U[y+dy,x+dx]
+            if 0<=v<NP: U[y,x]=v; break
+        else: U[y,x]=-4
+after={cnames[u-NP]:int((U==u).sum()) for u in cids}
+for t in (1,2,3,4):
+    xs=[after[n] for n in cnames if tier(n)==t]; print('tier',t,'cities',len(xs),'area px min/median/max',min(xs),int(np.median(xs)),max(xs),file=sys.stderr)
+np.save('U.npy',U)
 np.save('U.npy',U)
 prov_reg=[g['r'] for g in prov]
 city_reg=[creg[bar[cityb[n]]['c']] for n in cnames]
