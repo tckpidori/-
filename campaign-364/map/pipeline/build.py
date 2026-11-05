@@ -19,6 +19,9 @@ KIND={int(p):kind(int(p)) for p in ids}
 # ---- base groups: (duchy, region) for land ----
 CITYP={p:i for i,(nm,p) in enumerate(cityb.items())}
 cnames=list(cityb.keys())
+EXTRA={'Roma':[2577,2574]}   # Vaticano and Paterno join Rome
+for nm,lst in EXTRA.items():
+    for p in lst: CITYP[p]=cnames.index(nm)
 grp_of={}; groups=[]
 for p in ids:
     p=int(p)
@@ -159,6 +162,8 @@ area=np.bincount(P[P>=0],minlength=NP)
 # ---- unit raster: provinces, then city baronies ----
 U=P.copy()
 for nm,p in cityb.items(): U[pid==p]=NP+cnames.index(nm)
+for nm,lst in EXTRA.items():
+    for p in lst: U[pid==p]=NP+cnames.index(nm)
 for p in ids:
     p=int(p); k_=KIND[p]
     if k_=='l': continue

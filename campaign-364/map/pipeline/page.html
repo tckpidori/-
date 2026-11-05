@@ -5,7 +5,7 @@
 /* Layout: the map is the page; a narrow side panel (layer switch, selection, legend) sits beside it on wide screens and below it on phones. */
 :root{
   --bg:#f3f1ec; --panel:#ffffff; --fg:#1d1d1b; --muted:#6c6a64; --line:#d9d5cc; --accent:#b0281a;
-  --sea:#ade0f1; --sea-ink:#2b8ccc; --land:#ebebeb; --waste:#e2ded4; --empire:#f7cf6e; --river:#58a8c8;
+  --sea:#ade0f1; --sea-ink:#2b8ccc; --land:#ebebeb; --waste:#e2ded4; --empire:#8a2f86; --river:#58a8c8;
   --sans:"PT Sans","Segoe UI",system-ui,sans-serif; --serif:"PT Serif",Georgia,serif;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b1c1e; --panel:#24262a; --fg:#ecebe7; --muted:#a6a39c; --line:#3a3c40; --accent:#ff7a66; color-scheme:dark } }
@@ -94,7 +94,7 @@ M.meta.forEach(([l,r],i)=>{ if(l===-2||r===-2) return; const a=arcD(A[i]);
 const B=g.append("g").attr("fill","none").attr("pointer-events","none").attr("stroke-linejoin","round").attr("stroke-linecap","round");
 const bProv=B.append("path").attr("d",dProv).style("stroke","#8f8a7e").attr("stroke-width",.6).attr("stroke-opacity",.75).attr("vector-effect","non-scaling-stroke");
 const bReg=B.append("path").attr("d",dReg).style("stroke","#6e6a62").attr("stroke-width",1.1).attr("stroke-dasharray","5 3").attr("vector-effect","non-scaling-stroke");
-const bPars=B.append("path").attr("d",dPars).style("stroke","#7a3b12").attr("stroke-width",2).attr("stroke-dasharray","8 4").attr("vector-effect","non-scaling-stroke");
+const bPars=B.append("path").attr("d",dPars).style("stroke","#f1d6ee").attr("stroke-width",2).attr("stroke-dasharray","8 4").attr("vector-effect","non-scaling-stroke");
 const bRealm=B.append("path").attr("d",dRealm).style("stroke","#4d4a44").attr("stroke-width",1.6).attr("vector-effect","non-scaling-stroke");
 B.append("path").attr("d",dCoast).style("stroke","#5b8fa6").attr("stroke-width",.9).attr("vector-effect","non-scaling-stroke");
 const bCity=B.append("path").attr("d",dCity).style("stroke","#3d2f22").attr("stroke-width",.9).attr("vector-effect","non-scaling-stroke");
@@ -105,7 +105,7 @@ const lSea=L.selectAll("text.sea").data(M.seas).join("text").attr("x",d=>d.x).at
   .attr("font-style","italic").attr("font-family","PT Serif, Georgia, serif").text(d=>d.n);
 const realmKeys=Object.keys(RM).filter(k=>RM[k].a&&RM[k].A>2500);
 const lRealm=L.selectAll("text.realm").data(realmKeys).join("text").attr("x",k=>RM[k].a[0]).attr("y",k=>RM[k].a[1]).attr("text-anchor","middle").attr("font-weight",700)
-  .style("fill","#26241f").attr("letter-spacing",".04em").text(k=>RM[k].n);
+  .style("fill",k=>k==="ROM"?"#ffffff":"#26241f").style("stroke",k=>k==="ROM"?"#4a1247":"none").attr("paint-order","stroke").attr("stroke-linejoin","round").attr("letter-spacing",".04em").text(k=>RM[k].n);
 const regIds=R.map((r,i)=>i).filter(i=>R[i].a&&R[i].A>300);
 const lReg=L.selectAll("text.reg").data(regIds).join("text").attr("x",i=>R[i].a[0]).attr("y",i=>R[i].a[1]).attr("text-anchor","middle").style("fill","#1d1d1b").text(i=>R[i].ru);
 const lCity=L.selectAll("text.city").data(cityIds.filter(u=>U[u].a)).join("text").attr("x",u=>U[u].a[0]).attr("y",u=>U[u].a[1]).attr("text-anchor","middle")
@@ -134,7 +134,7 @@ function applyLayer(){
 let k=1;
 function size(){ const s=1/k, pol=layer==="P";
   lSea.attr("font-size",d=>(d.fs||(d.big?44:26))*s).attr("letter-spacing",d=>d.big?".25em":".12em").attr("transform",d=>d.rot?`rotate(${d.rot} ${d.x} ${d.y})`:null);
-  lRealm.attr("font-size",k=>Math.max(22,Math.min(64,Math.sqrt(RM[k].A)/9))*Math.max(s,.4));
+  lRealm.attr("font-size",k=>Math.max(22,Math.min(64,Math.sqrt(RM[k].A)/9))*Math.max(s,.4)).attr("stroke-width",k=>k==="ROM"?4*s:0);
   lReg.attr("font-size",i=>Math.max(13,Math.min(30,Math.sqrt(R[i].A)/7))*Math.max(s,.45)).attr("display",i=>(!pol||k>=2.2)?((k<1.4&&R[i].A<2500)?"none":null):"none");
   lCity.attr("font-size",15*s+1).attr("stroke-width",3.5*s).attr("dy",-10*s).attr("display",k>=2?null:"none");
   [lSea,lRealm,lReg].forEach(sel=>sel.each(function(){ const t=this; if(t.getAttribute("transform")) return; const x0=+t.getAttribute("data-x")||+t.getAttribute("x"); t.setAttribute("data-x",x0);

@@ -7,7 +7,7 @@ NC=len(B['cities'])
 ureg=np.array([p['r'] for p in B['prov']]+[c['r'] for c in B['cities']])
 # ---- realms and players per region ----
 REALM_OF={'W':'ROM','E':'ROM'}
-REALMS={'ROM':('Римская империя','#f7cf6e'),'ALAM':('Алеманны','#c99a6b'),'FRANC':('Франки','#b98a8a'),'TERV':('Тервинги','#8fb1d6'),
+REALMS={'ROM':('Римская империя','#8a2f86'),'ALAM':('Алеманны','#c99a6b'),'FRANC':('Франки','#b98a8a'),'TERV':('Тервинги','#8fb1d6'),
  'GREU':('Грейтунги','#7f9fcf'),'HUNS':('Гунны','#8c8a86'),'PERS':('Держава Сасанидов','#e9a46a'),'ARM':('Армения','#d8c9e8'),'MAUR':('Мавры Нубеля','#d9c45a'),
  'MUMU':('Муму','#8cc39a')}
 INDEP_COL=['#cfd6c4','#d9cbbd','#c9d3dc','#dccfd8','#d3d8c6','#d6cdc0','#c8d6d3','#dad3c2','#cdd0de','#d8c8c8']
