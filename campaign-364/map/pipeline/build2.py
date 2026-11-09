@@ -161,11 +161,50 @@ for p in np.argsort(parea):
 alive=[p for p in range(NPV) if (pv==p).any()]; rm=np.full(NPV,-1); rm[alive]=np.arange(len(alive))
 pv=np.where(pv>=0,rm[np.maximum(pv,0)],-1); PROV=[PROV[p] for p in alive]; NPV=len(PROV)
 log('provinces',NPV)
+# ---------- small provinces: CK3 duchies inside each province ----------
+cduchy=[None]*NC
+for p in ids:
+    if KIND[p]=='l': cduchy[cix[bar[p]['c']]]=bar[p]['d']
+sp=np.full(NC,-1); SPL=[]; key2={}
+for c in range(NC):
+    if pv[c]<0 or carea[c]==0: continue
+    k_=(int(pv[c]),cduchy[c])
+    if k_ not in key2: key2[k_]=len(SPL); SPL.append({'d':cduchy[c],'pv':int(pv[c])})
+    sp[c]=key2[k_]
+for g in range(len(SPL)):                       # a group in several pieces becomes several groups
+    cs=set(np.nonzero(sp==g)[0].tolist()); first=True
+    while cs:
+        s0=cs.pop(); comp=[s0]; st=[s0]
+        while st:
+            x=st.pop()
+            for q in adj[x]:
+                if q in cs: cs.discard(q); comp.append(q); st.append(q)
+        if not first:
+            SPL.append(dict(SPL[g]))
+            for x in comp: sp[x]=len(SPL)-1
+        first=False
+sarea=np.bincount(sp[sp>=0],weights=carea[sp>=0],minlength=len(SPL))
+MEDS=float(np.median(sarea[sarea>0])); MINSP=0.5*MEDS
+for g in np.argsort(sarea):
+    if sarea[g]==0 or sarea[g]>=MINSP: continue
+    v={}
+    for x in np.nonzero(sp==g)[0]:
+        for q,w in adj[x].items():
+            if sp[q]>=0 and sp[q]!=g and SPL[sp[q]]['pv']==SPL[g]['pv']: v[sp[q]]=v.get(sp[q],0)+w
+    if v:
+        t=max(v,key=lambda k_:v[k_]/math.sqrt(sarea[k_])); sarea[t]+=sarea[g]; sarea[g]=0; sp[sp==g]=t
+al=[g for g in range(len(SPL)) if (sp==g).any()]; rm2=np.full(len(SPL),-1); rm2[al]=np.arange(len(al))
+sp=np.where(sp>=0,rm2[np.maximum(sp,0)],-1); SPL=[SPL[g] for g in al]; NSP=len(SPL)
+sarea=np.bincount(sp[sp>=0],weights=carea[sp>=0],minlength=NSP)
+log('small provinces',NSP,'median area',int(np.median(sarea)),'min',int(sarea.min()),'max',int(sarea.max()))
 # ---------- rasters at K ----------
 K=2
 PRn=np.where(CN>=0,pv[np.maximum(CN,0)],-1)
 PRn=np.where(CN>=0,np.where(PRn>=0,PRn,-4),np.where(KL==1,-9,np.where(KL==2,-5,np.where(KL==3,-3,-4)))).astype(np.int32)
 PR2=np.repeat(np.repeat(PRn,K,0),K,1); H2,W2=PR2.shape
+SPn=np.where(CN>=0,sp[np.maximum(CN,0)],-1); SPn=np.where(SPn>=0,SPn,PRn).astype(np.int32)   # water and outside codes are shared
+SPn[(CN>=0)&(sp[np.maximum(CN,0)]<0)]=-4
+SP2=np.repeat(np.repeat(SPn,K,0),K,1)
 CITY=np.full((H2,W2),-1,np.int16)
 cnames=list(cityb)
 def dil(m,r):
@@ -253,24 +292,12 @@ for ci in order:
 for t in (1,2,3,4):
     xs_=[r_[3] for r_ in report if r_[1]==t]; log('tier',t,len(xs_),'area min/med/max',min(xs_),int(np.median(xs_)),max(xs_))
 log('off-target:',[(r_[0],r_[3]) for r_ in report if abs(r_[3]-TIER_AREA[r_[1]])>0.2*TIER_AREA[r_[1]]])
-U2=PR2.copy(); mc=CITY>=0; U2[mc]=NPV+CITY[mc]
+U2=SP2.copy(); mc=CITY>=0; U2[mc]=NSP+CITY[mc]
 np.save('U2.npy',U2)
 RKEYS=list(REGIONS)
-json.dump({'K':K,'NPV':NPV,'crop':[X0,X1,Y0,Y1],
+def pretty(t): return ' '.join(w.capitalize() for w in t[2:].split('_')) if t else '—'
+json.dump({'K':K,'NPV':NPV,'NSP':NSP,'crop':[X0,X1,Y0,Y1],
   'prov':[{'n':P['n'],'item':RNAME[P['r']],'reg':RKEYS.index(REGION_OF[RNAME[P['r']]])} for P in PROV],
-  'cities':[{'n':nm,'pv':int(pv[cix[bar[cityb[nm]]['c']]]),'t':tier(nm),'port':bool([r_ for r_ in report if r_[0]==nm][0][5])} for nm in cnames]},
+  'sp':[{'n':pretty(g['d']),'pv':g['pv']} for g in SPL],
+  'cities':[{'n':nm,'pv':int(pv[cix[bar[cityb[nm]]['c']]]),'t':tier(nm)} for nm in cnames]},
   open('build2.json','w'),ensure_ascii=False)
-# preview
-from PIL import Image
-rng=np.random.default_rng(3); pal=rng.integers(150,235,(NPV,3)).astype(np.uint8)
-rgb=np.zeros((H2,W2,3),np.uint8); rgb[:]=(174,224,242); rgb[U2==-4]=(232,232,228)
-m=(U2>=0)&(U2<NPV); rgb[m]=pal[U2[m]]; rgb[U2>=NPV]=(110,25,25)
-bd=((U2!=np.roll(U2,1,0))|(U2!=np.roll(U2,1,1)))&(U2>=0); rgb[bd]=(60,60,60)
-regof=np.array([p_['reg'] for p_ in json.load(open('build2.json'))['prov']])
-RG=np.where((U2>=0)&(U2<NPV),regof[np.clip(U2,0,NPV-1)],-1)
-rb=((RG!=np.roll(RG,1,0))|(RG!=np.roll(RG,1,1)))&(RG>=0)&(np.roll(RG,1,0)>=0)&(np.roll(RG,1,1)>=0); rgb[dil(rb,1)]=(0,0,0)
-Image.fromarray(rgb).resize((W2//4,H2//4),Image.LANCZOS).save('b_all.png')
-def crop(nm,r,out):
-    i=cnames.index(nm); ys_,xs_=np.nonzero(CITY==i); cy,cx=int(ys_.mean()),int(xs_.mean())
-    Image.fromarray(rgb[max(0,cy-r):cy+r,max(0,cx-r):cx+r]).resize((720,720),Image.NEAREST).save(out)
-crop('Roma',150,'b_roma.png'); crop('Nova Roma',150,'b_cpl.png'); crop('Lugdunum',260,'b_lug.png'); crop('Athenae',220,'b_ath.png')
