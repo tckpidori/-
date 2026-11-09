@@ -62,7 +62,10 @@ seas=[{'n':s[0],'x':round(float(p[0]),1),'y':round(float(p[1]),1),'big':s[3],'ro
 for s_ in seas:
     if s_['n'].startswith('Атлант'): s_.update(x=round(0.079*W2,1),y=round(0.468*H2,1),rot=-70,big=1.5)
 RANK={1:'столица',2:'имперский центр',3:'крупный город',4:'малый город'}
-units=[{'t':'p','n':g['n'],'pv':g['pv'],'r':int(ureg[i]),'a':ua.get(i),'A':int(uarea[i])} for i,g in enumerate(B['sp'])]
+exec(open('names.py').read())
+miss=[g['cs'][0] for g in B['sp'] if g['cs'][0] not in NAMES]
+if miss: print('NO ANCIENT NAME FOR:',miss,file=sys.stderr)
+units=[{'t':'p','n':NAMES.get(g['cs'][0],g['n']),'pv':g['pv'],'r':int(ureg[i]),'a':ua.get(i),'A':int(uarea[i])} for i,g in enumerate(B['sp'])]
 units+=[{'t':'c','n':c['n'],'r':int(ureg[NSP+i]),'pv':c['pv'],'tier':c['t'],'rank':RANK[c['t']],'a':ua.get(NSP+i),'A':int(uarea[NSP+i])} for i,c in enumerate(B['cities'])]
 provs=[{'n':p['n'],'r':p['reg'],'a':pa.get(i),'A':int(parea[i])} for i,p in enumerate(B['prov'])]
 data={'W':W2,'H':H2,'NSP':NSP,'provs':provs,'arcs':enc,'meta':meta,'rings':{str(k):v for k,v in rings.items()},'units':units,

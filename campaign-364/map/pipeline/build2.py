@@ -239,7 +239,7 @@ for ci in order:
     sea=B&nb(KLw==1); wat=B&nb((KLw==2)|(KLw==3))
     cands=[]                                   # (anchor, onwater) in order of preference
     if nm in SEA_PULL:
-        sp=np.argwhere(KLw==1); d2=((inner[:,None,:]-sp[None,::3,:])**2).sum(-1).min(1); cands.append((inner[d2.argmax()]+0.5,True))
+        seap=np.argwhere(KLw==1); d2=((inner[:,None,:]-seap[None,::3,:])**2).sum(-1).min(1); cands.append((inner[d2.argmax()]+0.5,True))
     if sea.any():
         c=np.argwhere(sea)
         dens=np.array([B[max(0,y-4):y+5,max(0,x-4):x+5].sum() for y,x in c])    # skip spits and islets
@@ -298,6 +298,6 @@ RKEYS=list(REGIONS)
 def pretty(t): return ' '.join(w.capitalize() for w in t[2:].split('_')) if t else '—'
 json.dump({'K':K,'NPV':NPV,'NSP':NSP,'crop':[X0,X1,Y0,Y1],
   'prov':[{'n':P['n'],'item':RNAME[P['r']],'reg':RKEYS.index(REGION_OF[RNAME[P['r']]])} for P in PROV],
-  'sp':[{'n':pretty(g['d']),'pv':g['pv']} for g in SPL],
+  'sp':[{'n':pretty(g['d']),'d':g['d'],'pv':g['pv'],'cy':float(np.average(ccy[sp==i],weights=carea[sp==i])),'cx':float(np.average(ccx[sp==i],weights=carea[sp==i])),'cs':[cname[c][2:] for c in np.nonzero(sp==i)[0]]} for i,g in enumerate(SPL)],
   'cities':[{'n':nm,'pv':int(pv[cix[bar[cityb[nm]]['c']]]),'t':tier(nm)} for nm in cnames]},
   open('build2.json','w'),ensure_ascii=False)
