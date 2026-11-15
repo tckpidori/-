@@ -285,6 +285,28 @@ window.D = (function () {
     return out;
   })();
 
+  /* ---------- места для обыска: здания внутри городов и одиночные точки ---------- */
+  BUILD.base = { n: 'Фактория', se: [0, 0], dng: 0, h: 0, loot: [] };
+  for (const k in BUILD) for (const r of BUILD[k].loot) r.p = Math.min(.9, r[1] * .065);
+  const POIB = { village: 'izba', farm: 'farm', gas: 'gas', sawmill: 'sawmill', checkpoint: 'checkpoint', camp: 'camp', zimovye: 'zimovye', meteo: 'meteo' };
+  (function () {
+    let sid = 0;
+    for (const c of CITIES) {
+      const r = mulberry32(hashStr('city' + c.n)), types = CITYSET[c.size].slice(), ex = CITYEXTRA[c.size];
+      if (ex.length) types.push(ex[Math.floor(r() * ex.length)]);
+      if ((c.size === 3 && r() < .55) || (c.size === 2 && r() < .2)) types.push('military');
+      if (c.f) types.push('base');
+      c.sites = []; const minD = c.r * .2;
+      for (const t of types) {
+        let x, y, tries = 0;
+        do { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * c.r * .85; x = c.x + Math.cos(a) * d; y = c.y + Math.sin(a) * d; tries++; }
+        while (tries < 60 && (isWater(x, y) || c.sites.some(q => Math.hypot(q.x - x, q.y - y) < minD)));
+        c.sites.push({ id: 's' + (sid++), x, y, t, n: BUILD[t].n, city: c.n });
+      }
+    }
+    for (const p of POIS) p.site = { id: p.id, x: p.x, y: p.y, t: POIB[p.t], n: p.n, big: p.t === 'village' || p.t === 'farm' };
+  })();
+
   /* ---------- рецепты ---------- */
   const RECIPES = [
     { id: 'boil', g: 'Еда и вода', n: 'Вскипятить воду', need: { dirtywater: 1 }, tools: ['pot'], fire: 1, out: { water: 1 }, h: .3 },

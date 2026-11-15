@@ -1,15 +1,15 @@
 'use strict';
-/* Правила: состояние, время, потребности, раны, болезни, бой, торговля, крафт, путь. */
-const { W, H, unproj, mulberry32, hashStr, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, CITYSET, CITYEXTRA, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, LAKES, RIVERS, SEAS, ISLES, fbm } = D;
+/* Правила: состояние, время, потребности, раны, болезни, обыск, бой, торговля, крафт, путь. */
+const { W, H, unproj, mulberry32, hashStr, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, LAKES, RIVERS, SEAS, ISLES, fbm, hash2 } = D;
 const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.floor(rnd(a, b + 1)), chance = p => Math.random() < p, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
 const pickW = l => { let t = 0; for (const x of l) t += x[1]; let r = Math.random() * t; for (const x of l) { r -= x[1]; if (r <= 0) return x; } return l[l.length - 1]; };
 const WEATHER = { clear: { n: 'Ясно', t: 0 }, cloud: { n: 'Пасмурно', t: -1 }, rain: { n: 'Дождь', t: -3 }, snow: { n: 'Снег', t: -2 }, blizzard: { n: 'Метель', t: -7 } };
-const SAVE_KEY = 'pepel-trakt-v1';
+const SAVE_KEY = 'pepel-trakt-v2';
 
-let g = null, curHere = null, curBiome = 'forest', trip = null, combatCb = null;
+let g = null, curHere = { city: null, site: null }, curBiome = 'forest', trip = null, combatCb = null;
 const UIH = { toast() {}, refresh() {}, combat() {}, over() {}, tripEnd() {} };
 
-/* ---------- инвентарь ---------- */
+/* ---------- инвентарь и земля ---------- */
 const has = (k, n = 1) => (g.inv[k] || 0) >= n - 1e-9;
 const add = (k, n = 1) => { g.inv[k] = (g.inv[k] || 0) + n; };
 const take = (k, n = 1) => { g.inv[k] = (g.inv[k] || 0) - n; if (g.inv[k] <= 1e-6) delete g.inv[k]; };
@@ -22,6 +22,14 @@ function armor() { let a = 0; for (const s of ['head', 'body', 'armor']) { const
 function radProt() { let p = 0; for (const s of ['mask', 'body']) { const k = g.eq[s]; if (k) p += ITEMS[k].prot || 0; } return Math.min(.9, p); }
 function log(m, k = '') { g.log.push({ t: g.time, m, k }); if (g.log.length > 140) g.log.shift(); }
 const fmtGot = got => Object.entries(got).map(([k, q]) => `${ITEMS[k].n} ×${Number.isInteger(q) ? q : q.toFixed(1)}`).join(', ');
+const gkey = () => curHere.site ? curHere.site.id : 'w' + Math.round(g.pos.x) + '_' + Math.round(g.pos.y);
+const groundHere = () => g.ground[gkey()] || {};
+function gput(k, n) { const key = gkey(), o = g.ground[key] || (g.ground[key] = {}); o[k] = (o[k] || 0) + n; }
+function gtake(k, n) { const key = gkey(), o = g.ground[key]; if (!o || !o[k]) return 0; n = Math.min(n, o[k]); o[k] -= n; if (o[k] <= 1e-6) delete o[k]; if (!Object.keys(o).length) delete g.ground[key]; return n; }
+function found(got, what) { for (const k in got) gput(k, got[k]); const t = fmtGot(got); log(`${what}: ${t || 'ничего'}.`, t ? 'good' : ''); UIH.toast(t ? 'Найдено: ' + t : 'Ничего не нашлось', t ? 'good' : ''); }
+function actPick(k) { const n = gtake(k, 1e9); if (n) add(k, n); done(); }
+function actPickAll() { const o = groundHere(); for (const k of Object.keys(o)) add(k, gtake(k, 1e9)); done(); }
+function actDrop(k, all) { if (!has(k)) return; const n = all ? g.inv[k] : Math.min(g.inv[k], 1); take(k, n); gput(k, n); done(); }
 
 /* ---------- время и погода ---------- */
 const absH = () => g.time + 8;
@@ -29,7 +37,7 @@ const hour = () => absH() % 24;
 const dayNum = () => Math.floor(absH() / 24) + 1;
 const doy = () => (226 + Math.floor(absH() / 24)) % 365;
 const isNight = () => { const h = hour(); return h < 6 || h >= 21; };
-function dateStr() { const ML = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], MN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']; let d = doy(), m = 0; while (d >= ML[m]) { d -= ML[m]; m++; } return (d + 1) + ' ' + MN[m]; }
+function dateStr() { const ML = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], MN = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']; let d = doy(), m = 0; while (d >= ML[m]) { d -= ML[m]; m++; } return (d + 1) + ' ' + MN[m]; }
 function seasonT(x, y) { const [lon, lat] = unproj(x, y); const mean = 18 - .62 * (lat - 35) - .035 * clamp(lon - 30, 0, 100), amp = 11 + .14 * clamp(lon - 20, 0, 90) + .1 * (lat - 40); return mean + amp * Math.cos((doy() - 200) / 365 * 2 * Math.PI); }
 function tempAt(x, y) { return seasonT(x, y) + (curBiome === 'desert' ? 8 : 5) * Math.sin((hour() - 9) / 24 * 2 * Math.PI) + WEATHER[g.weather].t; }
 const snowHere = () => seasonT(g.pos.x, g.pos.y) < -2;
@@ -43,25 +51,21 @@ function rollWeather() {
 /* ---------- место ---------- */
 function here() {
   const { x, y } = g.pos;
-  for (const c of CITIES) if (hyp(c.x - x, c.y - y) <= c.r) return { kind: 'city', key: 'c:' + c.n, o: c };
-  for (const p of POIS) if (hyp(p.x - x, p.y - y) <= 4) return { kind: 'poi', key: p.id, o: p };
-  return null;
+  for (const c of CITIES) if (hyp(c.x - x, c.y - y) <= c.r + 1) { let b = null, bd = .8; for (const s of c.sites) { const d = hyp(s.x - x, s.y - y); if (d < bd) { bd = d; b = s; } } return { city: c, site: b }; }
+  for (const p of POIS) if (hyp(p.x - x, p.y - y) <= 2) return { city: null, site: p.site };
+  return { city: null, site: null };
 }
 function locate() { curHere = here(); const ll = unproj(g.pos.x, g.pos.y); curBiome = biome(ll[0], ll[1]); }
 function discover() { for (const p of POIS) if (!g.found[p.id] && hyp(p.x - g.pos.x, p.y - g.pos.y) < 35) g.found[p.id] = 1; }
 function radAt(x, y) { let m = 0; for (const z of ZONES) { const d = hyp(z.x - x, z.y - y); if (d < z.r) m = Math.max(m, z.lvl * (.35 + .65 * (1 - d / z.r))); } return m; }
 function factionAt(x, y) { let best = null, bd = 1e9; for (const b of BASES) { const d = hyp(b.x - x, b.y - y); if (d < b.r && d < bd) { bd = d; best = b.f; } } return best; }
 const hostile = f => g.rep[f] <= -20;
-function getPlace(h) {
-  let p = g.places[h.key]; if (p) return p;
-  const r = mulberry32(g.seed ^ hashStr(h.key)), list = [], rich = radAt(h.o.x, h.o.y) > .1 ? 1 : 0;
-  const addB = t => { const m = BUILD[t], s = m.se[0] + Math.floor(r() * (m.se[1] - m.se[0] + 1)) + rich, b = { t, s, m: s }; if (t === 'garage') { const q = r(); if (q < .16) b.wr = 'moto'; else if (q < .26) b.wr = 'car'; } list.push(b); };
-  if (h.kind === 'city') {
-    const z = h.o.size; CITYSET[z].forEach(addB);
-    const ex = CITYEXTRA[z]; if (ex.length) addB(ex[Math.floor(r() * ex.length)]);
-    if ((z === 3 && r() < .55) || (z === 2 && r() < .2)) addB('military');
-  } else POIT[h.o.t].b.forEach(addB);
-  return g.places[h.key] = { b: list };
+function siteState(s) {
+  let st = g.sites[s.id]; if (st) return st;
+  const m = BUILD[s.t], r = mulberry32(g.seed ^ hashStr(s.id));
+  const n = m.se[1] ? m.se[0] + Math.floor(r() * (m.se[1] - m.se[0] + 1)) + (s.big ? 2 : 0) + (radAt(s.x, s.y) > .1 ? 1 : 0) : 0;
+  st = { s: n, m: n }; if (s.t === 'garage') { const q = r(); if (q < .16) st.wr = 'moto'; else if (q < .26) st.wr = 'car'; }
+  return g.sites[s.id] = st;
 }
 function freshDist() {
   const { x, y } = g.pos; let m = 1e9;
@@ -75,24 +79,24 @@ const fireOn = () => !!(g.fire && g.time < g.fire.until && hyp(g.fire.x - g.pos.
 
 /* ---------- новая игра ---------- */
 function newGame() {
-  const c = CITY['Рязань'];
+  const s0 = CITY['Рязань'].sites.find(s => s.t === 'house');
   g = {
-    v: 1, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: c.x + 3, y: c.y + 2 },
+    v: 2, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: s0.x, y: s0.y },
     s: { hp: 100, hunger: 75, thirst: 75, warmth: 80, rad: 0, mood: 60 },
     inv: { crackers: 2, water: 2, matches: 6, ragband: 1, cloth: 2 },
     eq: { melee: 'knife', ranged: null, head: null, body: 'jacket', legs: 'pants', feet: 'shoes', mask: null, armor: null, back: null },
-    veh: null, wounds: [], dis: {}, pk: 0, fire: null, places: {}, found: {}, rep: {}, stock: {},
+    veh: null, wounds: [], dis: {}, pk: 0, fire: null, sites: {}, ground: {}, found: {}, rep: {}, stock: {},
     sk: { surv: [0, 0], med: [0, 0], mech: [0, 0], fight: [0, 0] },
     weather: 'clear', wLeft: 6, log: [], warn: {}, stats: { km: 0, kills: 0, searched: 0 }, over: null, combat: null
   };
   for (const k in FACTIONS) g.rep[k] = FACTIONS[k].rep;
   locate(); discover();
-  log('Ты один, на окраине Рязани. В рюкзаке почти пусто.');
-  log('Обыскивай дома, ищи воду и тёплую одежду. Жёлтые пятна на карте — заражённые земли: без защиты туда лучше не заходить.');
+  log('Ты один, в пустом доме на окраине Рязани. В рюкзаке почти ничего.');
+  log('Обыскивай здания, ищи воду и тёплую одежду. Приблизь карту — внутри города видны отдельные дома. Заштрихованные пятна — заражённые земли.');
   return g;
 }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(g)); } catch (e) { /* хранилище недоступно */ } }
-function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 1 && o.pos) return o; } } catch (e) { /* нет сохранения */ } return null; }
+function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 2 && o.pos && o.ground) return o; } } catch (e) { /* нет сохранения */ } return null; }
 
 /* ---------- навыки ---------- */
 const xpNeed = l => 20 * (l + 1);
@@ -108,8 +112,7 @@ function getSick(d, msg) { if (g.dis[d]) return; g.dis[d] = DIS[d].dur || -1; lo
 function step(dt, ctx) {
   g.time += dt; g.wLeft -= dt; if (g.wLeft <= 0) rollWeather();
   const s = g.s, ds = g.dis, mv = ctx.move, rest = !!ctx.rest, legs = mv === 'foot' || mv === 'bike';
-  const shelter = !mv && !!curHere, fire = !mv && fireOn(), T = tempAt(g.pos.x, g.pos.y);
-  // голод и жажда
+  const shelter = !mv && !!curHere.site, fire = !mv && fireOn(), T = tempAt(g.pos.x, g.pos.y);
   let hm = 1, tm = 1;
   if (legs) { hm = 1.3; tm = 1.3; }
   if (rest) { hm *= .7; tm *= .7; }
@@ -119,23 +122,19 @@ function step(dt, ctx) {
   if (s.rad >= 30) hm *= 1.2;
   if (T > 28) tm *= 1.4;
   s.hunger -= 2 * dt * hm; s.thirst -= 2.9 * dt * tm;
-  // тепло
   let comfort = T + wearWarm() * 1.5 + (fire ? 22 : 0) + (shelter ? 6 : 0) + (legs ? 4 : 0) + (mv === 'car' ? 10 : 0);
   if (rest) comfort += (owns('sleepbag') ? 6 : 0) + (!shelter && owns('tent') ? 8 : 0);
   if (!shelter && mv !== 'car') { if (g.weather === 'rain') comfort -= 4; if (g.weather === 'blizzard') comfort -= 5; }
   const e = comfort - 12;
   s.warmth += (e >= 0 ? Math.min(12, 2 + e * .5) : Math.max(-9, e * .3)) * dt;
-  // радиация
   const rr = radAt(g.pos.x, g.pos.y) * 3.2 * (1 - radProt());
   s.rad += rr > 0 ? rr * dt : -.12 * dt;
-  // настрой
   let md = -.3;
   if (isNight() && !fire && !shelter) md -= .4;
   if (fire && rest) md += 1.6; else if (rest && shelter) md += .6;
   if (s.hunger < 20 || s.thirst < 20) md -= .6;
   md -= painLevel() * .15; if (Object.keys(ds).length) md -= .3;
   s.mood += md * dt;
-  // раны
   let bleed = 0;
   for (let i = g.wounds.length - 1; i >= 0; i--) {
     const w = g.wounds[i], d = WOUNDS[w.t];
@@ -145,13 +144,11 @@ function step(dt, ctx) {
     w.h -= dt * hs;
     if (w.h <= 0) { g.wounds.splice(i, 1); log(`Зажило: ${d.n.toLowerCase()}.`, 'good'); }
   }
-  // болезни
   for (const k in ds) if (ds[k] > 0) { ds[k] -= dt * (rest ? 1.3 : 1); if (ds[k] <= 0) { delete ds[k]; log(`${DIS[k].n}: прошло.`, 'good'); } }
   if (s.warmth < 32 && !ds.cold && !ds.pneumonia && chance(.05 * dt)) getSick('cold', 'Ты простудился. Нужно тепло и лекарство.');
   if (ds.cold && s.warmth < 35 && chance(.015 * dt)) { delete ds.cold; getSick('pneumonia', 'Простуда перешла в пневмонию. Без антибиотиков не выжить.'); }
   if (s.warmth < 8 && chance(.15 * dt)) getSick('frostbite', 'Обморожение. Срочно в тепло.');
   clampS();
-  // здоровье
   let dmg = 0, worst = 0, cause = '';
   const src = (v, c) => { if (v > 0) { dmg += v; if (v > worst) { worst = v; cause = c; } } };
   src(s.hunger <= 0 ? 1.5 : 0, 'от голода'); src(s.thirst <= 0 ? 3 : 0, 'от жажды');
@@ -175,68 +172,79 @@ function die(reason) { if (g.over) return; g.s.hp = 0; g.over = { win: false, re
 function done() { if (!g.over) warnCheck(); save(); UIH.refresh(); if (g.over) UIH.over(); }
 
 /* ---------- лагерь и природа ---------- */
-function rollLoot(table, n) { const got = {}; for (let i = 0; i < n; i++) { const r = pickW(table), q = r.length > 2 ? ri(r[2], r[3]) : 1; add(r[0], q); got[r[0]] = (got[r[0]] || 0) + q; } return got; }
-function gain(got, what) { const t = fmtGot(got); for (const k in got) if (!(k in ITEMS)) throw new Error(k); log(`${what}: ${t || 'ничего'}.`, t ? 'good' : ''); UIH.toast(t ? '+ ' + t : 'Ничего не нашлось', t ? 'good' : ''); }
 function actFire() {
   if (!has('wood', 2)) return UIH.toast('Нужно 2 дрова.', 'bad');
   if (owns('lighter')) { /* зажигалка не тратится */ } else if (has('matches')) take('matches', 1); else return UIH.toast('Нечем разжечь: нужны спички или зажигалка.', 'bad');
   take('wood', 2); g.fire = { x: g.pos.x, y: g.pos.y, until: g.time + 4 }; pass(.3, {}); log('Костёр разгорелся.'); done();
 }
 function actStoke() { if (!fireOn() || !has('wood')) return; take('wood', 1); g.fire.until += 2; done(); }
-function wildDanger() { if (curHere && curHere.kind === 'city' && curHere.o.f && !hostile(curHere.o.f)) return 0; return curHere ? .05 : fireOn() ? .07 : .14; }
+const friendlyCity = () => !!(curHere.city && curHere.city.f && !hostile(curHere.city.f));
+function wildDanger() { if (friendlyCity()) return 0; return curHere.site ? .05 : fireOn() ? .07 : .14; }
+const encCtx = () => curHere.site ? (BUILD[curHere.site.t].mil ? 'mil' : 'city') : curHere.city ? 'city' : 'wild';
 function actRest(h) {
   let n = 0, why = '';
   while (n < h) { pass(1, { rest: true }); n++; if (g.over) return done(); if (g.s.warmth < 18) { why = 'Холод не даёт лежать.'; break; } if (g.s.thirst < 5 || g.s.hunger < 5) { why = 'Голод и жажда подняли на ноги.'; break; } }
   log(`Отдых: ${n} ч. ${why}`);
-  if (chance(wildDanger() * n / 8)) return startCombat(makeEncounter(curHere ? 'city' : 'wild'), { close: true, intro: 'Шорох совсем рядом — тебя нашли.' }, () => done());
+  if (chance(wildDanger() * n / 8)) return startCombat(makeEncounter(encCtx()), { close: true, intro: 'Шорох совсем рядом — тебя нашли.' }, () => done());
   done();
 }
-function actWater() { if (freshDist() > 12) return; add('dirtywater', 3); pass(.4, {}); gain({ dirtywater: 3 }, 'Набрал воды'); done(); }
+const wildOK = () => !curHere.city;
+function wildFinds() {
+  const b = curBiome, o = [];
+  if (wildOK()) {
+    if (b === 'forest' || b === 'taiga') o.push('wood'); else o.push('wood');
+    if (!snowHere()) { if (b === 'forest' || b === 'taiga') o.push('berries', 'mushrooms', 'herbs'); else if (b === 'steppe') o.push('herbs', 'berries'); else if (b === 'tundra') o.push('berries'); }
+    if (b !== 'desert') o.push('rawmeat', 'leather');
+  }
+  if (freshDist() <= 12) o.push('dirtywater', 'fish');
+  return o;
+}
+function actWater() { if (freshDist() > 12) return; pass(.4, {}); found({ dirtywater: 3 }, 'Набрал воды'); done(); }
 function actWood() {
+  if (!wildOK()) return;
   const base = { forest: [2, 4], taiga: [2, 4], steppe: [0, 2], tundra: [0, 1], desert: [0, 1] }[curBiome];
   pass(1.5, {}); if (g.over) return done();
-  const q = ri(base[0], base[1]) + (owns('axe') ? 2 : 0), got = {}; if (q) { add('wood', q); got.wood = q; }
-  addXp('surv', 2); gain(got, 'Сбор дров');
+  const q = ri(base[0], base[1]) + (owns('axe') ? 2 : 0), got = {}; if (q) got.wood = q;
+  addXp('surv', 2); found(got, 'Сбор дров');
   if (chance(.06)) return startCombat(makeEncounter('wild'), { intro: 'Пока ты возился с дровами, кто-то подошёл.' }, () => done());
   done();
 }
 function actForage() {
-  if (snowHere()) return UIH.toast('Под снегом ничего не найти.', '');
+  if (!wildOK()) return; if (snowHere()) return UIH.toast('Под снегом ничего не найти.', '');
   pass(1.5, {}); if (g.over) return done();
-  const b = curBiome, got = {}, lv = g.sk.surv[0], put = (k, a, c) => { const q = ri(a, c + (chance(.15 * lv) ? 1 : 0)); if (q > 0) { add(k, q); got[k] = q; } };
+  const b = curBiome, got = {}, lv = g.sk.surv[0], put = (k, a, c) => { const q = ri(a, c + (chance(.15 * lv) ? 1 : 0)); if (q > 0) got[k] = q; };
   if (b === 'forest' || b === 'taiga') { put('berries', 0, 3); put('mushrooms', 0, 3); put('herbs', 0, 2); }
   else if (b === 'steppe') { put('herbs', 0, 2); put('berries', 0, 1); }
   else if (b === 'tundra') { put('berries', 0, 3); }
-  addXp('surv', 3); gain(got, 'Собирательство'); done();
+  addXp('surv', 3); found(got, 'Собирательство'); done();
 }
 function actHunt() {
+  if (!wildOK()) return;
   const rw = g.eq.ranged ? ITEMS[g.eq.ranged] : null, shoot = rw && has(rw.ammo), spear = g.eq.melee === 'spear';
   if (!shoot && !spear) return UIH.toast('Для охоты нужно стрелковое оружие с патронами или копьё.', 'bad');
   pass(3, {}); if (g.over) return done();
-  const r = Math.random();
-  if (r < .12) return startCombat(makeEncounter('wild'), { intro: 'Ты шёл по следу, а вышли на тебя.' }, () => done());
+  if (chance(.12)) return startCombat(makeEncounter('wild'), { intro: 'Ты шёл по следу, а вышли на тебя.' }, () => done());
   if (shoot) take(rw.ammo, 1);
-  const p = (shoot ? .62 : .32) + .05 * g.sk.surv[0];
-  if (curBiome !== 'desert' && chance(p)) { const got = { rawmeat: ri(2, 4) }; if (chance(.7)) got.leather = ri(1, 2); for (const k in got) add(k, got[k]); addXp('surv', 6); gain(got, 'Охота'); }
+  if (curBiome !== 'desert' && chance((shoot ? .62 : .32) + .05 * g.sk.surv[0])) { const got = { rawmeat: ri(2, 4) }; if (chance(.7)) got.leather = ri(1, 2); addXp('surv', 6); found(got, 'Охота'); }
   else { addXp('surv', 2); log('Охота впустую.'); UIH.toast('Зверь ушёл', ''); }
   done();
 }
 function actFish() {
   if (!owns('fishrod') || freshDist() > 12) return;
   pass(2, {}); if (g.over) return done();
-  const q = ri(0, 3) + (chance(.2 * g.sk.surv[0]) ? 1 : 0), got = {}; if (q) { add('fish', q); got.fish = q; }
-  addXp('surv', 3); gain(got, 'Рыбалка'); done();
+  const q = ri(0, 3) + (chance(.2 * g.sk.surv[0]) ? 1 : 0), got = {}; if (q) got.fish = q;
+  addXp('surv', 3); found(got, 'Рыбалка'); done();
 }
 
 /* ---------- обыск ---------- */
-function actSearch(i) {
-  const h = curHere; if (!h) return; const b = getPlace(h).b[i]; if (!b || b.s <= 0) return;
-  const m = BUILD[b.t]; pass(m.h, {}); if (g.over) return done();
-  b.s--; g.stats.searched++;
-  const friendly = h.kind === 'city' && h.o.f && !hostile(h.o.f), zone = radAt(g.pos.x, g.pos.y) > .1;
-  const loot = () => { const n = 2 + (chance(.25 + .06 * g.sk.surv[0]) ? 1 : 0) + (owns('crowbar') && chance(.35) ? 1 : 0); const got = rollLoot(m.loot, n); addXp('surv', 2); gain(got, m.n); };
-  if (chance(m.dng * (isNight() ? 1.4 : 1) * (zone ? 1.3 : 1) * (friendly ? .3 : 1))) {
-    return startCombat(makeEncounter(m.mil ? 'mil' : 'city'), { close: true, intro: `${m.n}: внутри кто-то есть.` }, res => { if (res === 'win') loot(); else { log('Обыск сорван.', 'bad'); b.s++; } done(); });
+function actSearch() {
+  const s = curHere.site; if (!s) return; const st = siteState(s), m = BUILD[s.t]; if (st.s <= 0) return;
+  pass(m.h, {}); if (g.over) return done();
+  st.s--; g.stats.searched++;
+  const zone = radAt(g.pos.x, g.pos.y) > .1;
+  const loot = () => { const got = {}, bonus = 1 + .06 * g.sk.surv[0] + (owns('crowbar') ? .12 : 0); for (const r of m.loot) if (chance(Math.min(.95, r.p * bonus))) got[r[0]] = (got[r[0]] || 0) + (r.length > 2 ? ri(r[2], r[3]) : 1); addXp('surv', 2); found(got, s.n); };
+  if (chance(m.dng * (isNight() ? 1.4 : 1) * (zone ? 1.3 : 1) * (friendlyCity() ? .3 : 1))) {
+    return startCombat(makeEncounter(m.mil ? 'mil' : 'city'), { close: true, intro: `${m.n}: внутри кто-то есть.` }, res => { if (res === 'win') loot(); else { log('Обыск сорван.', 'bad'); st.s++; } done(); });
   }
   loot(); done();
 }
@@ -260,7 +268,6 @@ function actUse(k) {
 }
 function actEquip(k) { const it = ITEMS[k], slot = it.c === 'melee' ? 'melee' : it.c === 'ranged' ? 'ranged' : it.slot; if (!slot || !has(k)) return; take(k, 1); if (g.eq[slot]) add(g.eq[slot], 1); g.eq[slot] = k; done(); }
 function actUnequip(slot) { if (!g.eq[slot]) return; add(g.eq[slot], 1); g.eq[slot] = null; done(); }
-function actDrop(k) { if (!has(k)) return; take(k, Math.min(g.inv[k], k === 'fuel' ? 5 : 1)); done(); }
 function actTreat(i, kind) {
   const w = g.wounds[i]; if (!w) return;
   if (kind === 'band') { if (has('bandage')) { take('bandage'); w.b = 2; } else if (has('ragband')) { take('ragband'); w.b = 1; } else return; }
@@ -270,7 +277,7 @@ function actTreat(i, kind) {
 }
 
 /* ---------- крафт ---------- */
-const wreckHere = t => curHere ? getPlace(curHere).b.find(b => b.wr === t) : null;
+const wreckHere = t => { const s = curHere.site; if (!s) return null; const st = siteState(s); return st.wr === t ? st : null; };
 function craftMiss(r) {
   const m = [];
   for (const k in r.need) if (!has(k, r.need[k])) m.push(ITEMS[k].n);
@@ -287,7 +294,7 @@ function actCraft(id) {
   for (const k in r.need) take(k, r.need[k]);
   pass(craftTime(r), {}); if (g.over) return done();
   if (r.veh) { if (r.wr) wreckHere(r.wr).wr = null; if (g.veh) log(`${VEH[g.veh.t].n} оставлен.`); g.veh = { t: r.veh, parked: null }; log(`Готово: ${VEH[r.veh].n.toLowerCase()}.`, 'good'); UIH.toast(VEH[r.veh].n + ' на ходу', 'good'); }
-  else { for (const k in r.out) add(k, r.out[k]); gain(r.out, r.n); }
+  else { for (const k in r.out) add(k, r.out[k]); const t = fmtGot(r.out); log(`${r.n}: ${t}.`, 'good'); UIH.toast('Готово: ' + t, 'good'); }
   if (r.xp) addXp(r.xp[0], r.xp[1]);
   done();
 }
@@ -300,7 +307,7 @@ function moveMode() {
   if (id === 'foot') { if (snow) sp *= .8; if (isNight()) sp *= .9; if (fr) sp *= fr.sp ? .7 : .5; }
   if (id === 'bike') { if (snow) sp *= .5; if (fr) sp *= .6; }
   if (g.weather === 'blizzard') sp *= .6; else if (g.weather === 'rain') sp *= .9;
-  if (w > cap * 1.4) blocked = 'Слишком тяжело. Выброси лишнее.'; else if (w > cap) sp *= .5;
+  if (w > cap * 1.4) blocked = 'Слишком тяжело. Выложи лишнее.'; else if (w > cap) sp *= .5;
   return { sp, fuel, id, by, blocked };
 }
 function clipRoute(x0, y0, x1, y1) {
@@ -312,12 +319,12 @@ function clipRoute(x0, y0, x1, y1) {
 function routeInfo(tx, ty) { const e = clipRoute(g.pos.x, g.pos.y, tx, ty), km = hyp(e.x - g.pos.x, e.y - g.pos.y), m = moveMode(); return { x: e.x, y: e.y, cut: e.cut, km, m, h: km / m.sp, fuel: km * m.fuel }; }
 function startTrip(tx, ty) {
   const r = routeInfo(tx, ty);
-  if (r.km < .5) { UIH.toast(r.cut ? 'Туда не пройти: вода.' : 'Ты уже здесь.', ''); return false; }
+  if (r.km < .05) { UIH.toast(r.cut ? 'Туда не пройти: вода.' : 'Ты уже здесь.', ''); return false; }
   if (r.m.blocked) { UIH.toast(r.m.blocked, 'bad'); return false; }
-  trip = { tx: r.x, ty: r.y, total: r.km, rate: r.h / clamp(r.h * .4, 1.5, 16), saveT: 0 };
+  trip = { tx: r.x, ty: r.y, total: r.km, rate: r.h / clamp(r.h * .4, 1.2, 16), saveT: 0 };
   return true;
 }
-function stopTrip(msg) { trip = null; if (msg) { log(msg); UIH.toast(msg, ''); } UIH.tripEnd(); done(); }
+function stopTrip(msg) { trip = null; if (msg) { log(msg); UIH.toast(msg, ''); } UIH.tripEnd(false); done(); }
 function tripStep(realDt) {
   if (!trip || g.over || g.combat) return;
   const m = moveMode(); if (m.blocked) return stopTrip(m.blocked);
@@ -328,26 +335,26 @@ function tripStep(realDt) {
   g.stats.km += dist; locate(); discover(); step(dtH, { move: m.id });
   if (g.over) { trip = null; return done(); }
   if (warnCheck()) return stopTrip('');
-  if (rem - dist < .05) { const h = curHere; trip = null; if (h) log(`Прибыл: ${h.o.n}.`); UIH.tripEnd(); return done(); }
-  let er = (m.id === 'moto' || m.id === 'car') ? .012 : .03; if (isNight()) er *= 1.5; if (radAt(g.pos.x, g.pos.y) > .2) er *= 1.4; const f = factionAt(g.pos.x, g.pos.y); if (f && hostile(f)) er *= 2;
-  if (!isWater(g.pos.x, g.pos.y) && chance(er * dtH)) { const enc = makeEncounter('wild'); trip = null; UIH.tripEnd(); return startCombat(enc, {}, () => done()); }
-  if (chance(.006 * dtH)) { const got = rollLoot(BUILD.camp.loot, 1); gain(got, 'Находка у дороги'); }
+  if (rem - dist < .02) { trip = null; if (curHere.site) log(`Прибыл: ${curHere.site.n}${curHere.city ? ', ' + curHere.city.n : ''}.`); UIH.tripEnd(true); return done(); }
+  let er = (m.id === 'moto' || m.id === 'car') ? .012 : .03; if (isNight()) er *= 1.5; if (radAt(g.pos.x, g.pos.y) > .2) er *= 1.4; const f = factionAt(g.pos.x, g.pos.y); if (f && hostile(f)) er *= 2; if (friendlyCity()) er *= .3;
+  if (!isWater(g.pos.x, g.pos.y) && chance(er * dtH)) { const enc = makeEncounter(curHere.city ? 'city' : 'wild'); trip = null; UIH.tripEnd(false); return startCombat(enc, {}, () => done()); }
+  if (chance(.006 * dtH)) { const r = pickW(BUILD.camp.loot), got = {}; got[r[0]] = 1; add(r[0], 1); log('Находка у дороги: ' + fmtGot(got) + '.', 'good'); UIH.toast('Находка: ' + fmtGot(got), 'good'); }
   trip.saveT += realDt; if (trip.saveT > 4) { trip.saveT = 0; save(); }
 }
 function actPark() { if (!withVeh()) return; g.veh.parked = { x: g.pos.x, y: g.pos.y }; log(`${VEH[g.veh.t].n} оставлен здесь.`); done(); }
 function actBoard() { const v = g.veh; if (!v || !v.parked || hyp(v.parked.x - g.pos.x, v.parked.y - g.pos.y) > 3) return; v.parked = null; done(); }
 
 /* ---------- бой ---------- */
-function makeEncounter(ctx) {
+function encPool(ctx) {
   const { x, y } = g.pos, f = factionAt(x, y); let pool;
   if (ctx === 'city') pool = [['rat', 3], ['dog', 3], ['marauder', 3], ['gunman', 1.5]];
   else if (ctx === 'mil') pool = [['gunman', 2], ['deserter', 3], ['marauder', 1]];
   else pool = WILD[curBiome].slice();
   if (radAt(x, y) > .15) pool = pool.concat([['glowdog', 4], ['burnt', 3]]);
-  if (f && hostile(f) && ctx !== 'city') pool = pool.concat([[FACTIONS[f].unit, 7]]);
-  const k = pickW(pool)[0], e = ENEMIES[k];
-  return { k, n: ri(e.grp[0], e.grp[1]) };
+  if (f && hostile(f) && ctx === 'wild') pool = pool.concat([[FACTIONS[f].unit, 7]]);
+  return pool;
 }
+function makeEncounter(ctx) { const k = pickW(encPool(ctx))[0], e = ENEMIES[k]; return { k, n: ri(e.grp[0], e.grp[1]) }; }
 function startCombat(enc, opt, cb) {
   const e = ENEMIES[enc.k], en = [];
   for (let i = 0; i < enc.n; i++) en.push({ k: enc.k, hp: e.hp, d: (opt.close ? ri(4, 14) : e.rng ? ri(25, Math.min(60, e.rng + 15)) : ri(14, 38)) + i * ri(0, 4) });
@@ -372,11 +379,10 @@ function cAct(a, arg) {
   if (a === 'tgt') { if (c.en[+arg] && c.en[+arg].hp > 0) c.tgt = +arg; return UIH.combat(); }
   if (!c.en[c.tgt] || c.en[c.tgt].hp <= 0) c.tgt = c.en.findIndex(x => x.hp > 0);
   const t = c.en[c.tgt], te = ENEMIES[t.k], fl = 1 + .05 * g.sk.fight[0];
-  const strike = (dmg, verb) => { t.hp -= dmg; push(`${verb}: ${te.n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); };
   if (a === 'melee') {
     const w = g.eq.melee ? ITEMS[g.eq.melee] : { n: 'Кулаки', dmg: [2, 4], reach: 2 };
     if (t.d > w.reach) { push(`До цели ${Math.round(t.d)} м — слишком далеко для удара.`); return UIH.combat(); }
-    if (chance(playerAcc(w, t.d))) strike(Math.round(ri(w.dmg[0], w.dmg[1]) * fl), w.n); else push(`${w.n}: мимо.`);
+    if (chance(playerAcc(w, t.d))) { const dmg = Math.round(ri(w.dmg[0], w.dmg[1]) * fl); t.hp -= dmg; push(`${w.n}: ${te.n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); } else push(`${w.n}: мимо.`);
   } else if (a === 'ranged') {
     const w = g.eq.ranged ? ITEMS[g.eq.ranged] : null; if (!w || !has(w.ammo)) { push('Стрелять нечем.'); return UIH.combat(); }
     const shots = Math.min(w.burst || 1, g.inv[w.ammo]);
@@ -413,20 +419,20 @@ function endCombat(res) {
   const c = g.combat, cb = combatCb; g.combat = null; combatCb = null;
   if (res === 'win') {
     const got = {}; let xp = 0;
-    for (const x of c.en) { const e = ENEMIES[x.k]; xp += e.xp; g.stats.kills++; for (const d of e.drop) if (chance(d[1])) { const q = ri(d[2], d[3]); add(d[0], q); got[d[0]] = (got[d[0]] || 0) + q; } }
+    for (const x of c.en) { const e = ENEMIES[x.k]; xp += e.xp; g.stats.kills++; for (const d of e.drop) if (chance(d[1])) { const q = ri(d[2], d[3]); gput(d[0], q); got[d[0]] = (got[d[0]] || 0) + q; } }
     if (c.f) { g.rep[c.f] = clamp(g.rep[c.f] - 8, -100, 100); if (FACTIONS[c.f].gang) { g.rep.gar = clamp(g.rep.gar + 1, -100, 100); g.rep.put = clamp(g.rep.put + 1, -100, 100); } }
     g.s.mood = clamp(g.s.mood + 3, 0, 100); addXp('fight', xp);
-    const t = fmtGot(got); log(`Победа. ${t ? 'Трофеи: ' + t + '.' : 'Трофеев нет.'}`, 'good'); UIH.toast(t ? 'Трофеи: ' + t : 'Победа', 'good');
+    const t = fmtGot(got); log(`Победа. ${t ? 'Трофеи лежат на земле: ' + t + '.' : 'Трофеев нет.'}`, 'good'); UIH.toast(t ? 'Трофеи на земле: ' + t : 'Победа', 'good');
   } else if (res === 'flee') { log('Удалось уйти.'); UIH.toast('Ты ушёл', ''); }
   if (cb) cb(res); else done();
 }
 
 /* ---------- торговля ---------- */
-const baseHere = () => curHere && curHere.kind === 'city' && curHere.o.f ? curHere.o.f : null;
+const baseHere = () => curHere.site && curHere.site.t === 'base' && curHere.city ? curHere.city.f : null;
 const canTrade = f => g.rep[f] > (FACTIONS[f].gang ? -10 : -20);
-function stockOf() { const key = curHere.key, f = baseHere(); let s = g.stock[key]; if (!s || g.time - s.t > 72) { const it = {}; for (const r of STOCKS[FACTIONS[f].stock]) { const q = ri(r[1], r[2]); if (q > 0) it[r[0]] = q; } s = g.stock[key] = { t: g.time, it }; } return s; }
+function stockOf() { const key = curHere.site.id, f = baseHere(); let s = g.stock[key]; if (!s || g.time - s.t > 72) { const it = {}; for (const r of STOCKS[FACTIONS[f].stock]) { const q = ri(r[1], r[2]); if (q > 0) it[r[0]] = q; } s = g.stock[key] = { t: g.time, it }; } return s; }
 const buyPrice = (k, f) => Math.max(1, Math.ceil(ITEMS[k].v * 1.35 * (1 - g.rep[f] / 250)));
 const sellPrice = (k, f) => Math.max(1, Math.floor(ITEMS[k].v * .55 * (1 + g.rep[f] / 250)));
 function actBuy(k) { const f = baseHere(); if (!f || !canTrade(f)) return; const s = stockOf(), p = buyPrice(k, f); if (!s.it[k] || !has('coupon', p)) return; take('coupon', p); add(k, 1); if (--s.it[k] <= 0) delete s.it[k]; g.rep[f] = clamp(g.rep[f] + ITEMS[k].v / 60, -100, 100); done(); }
-function actSell(k) { const f = baseHere(); if (!f || !canTrade(f) || !has(k) || k === 'coupon') return; const s = stockOf(), n = k === 'fuel' ? Math.min(1, g.inv[k]) : 1; take(k, n); add('coupon', Math.max(1, Math.round(sellPrice(k, f) * n))); s.it[k] = (s.it[k] || 0) + n; g.rep[f] = clamp(g.rep[f] + ITEMS[k].v / 60, -100, 100); done(); }
-const repWord = (f) => { const r = g.rep[f]; return r <= -20 ? 'враждебны' : r < 10 ? 'нейтральны' : r < 40 ? 'расположены' : 'свой человек'; };
+function actSell(k) { const f = baseHere(); if (!f || !canTrade(f) || !has(k) || k === 'coupon') return; const s = stockOf(), n = Math.min(1, g.inv[k]); take(k, n); add('coupon', Math.max(1, Math.round(sellPrice(k, f) * n))); s.it[k] = (s.it[k] || 0) + n; g.rep[f] = clamp(g.rep[f] + ITEMS[k].v / 60, -100, 100); done(); }
+const repWord = f => { const r = g.rep[f]; return r <= -20 ? 'враждебны' : r < 10 ? 'нейтральны' : r < 40 ? 'расположены' : 'свой человек'; };
