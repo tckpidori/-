@@ -1,0 +1,156 @@
+<title>Пепельный тракт</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Раскладка: один экран — полоса состояния, карта, вкладки снаряжения (на широком экране колонкой справа). Один тёмный вид. */
+:root{
+  --ink:#0e1317; --panel:#151c22; --raise:#1c252d; --line:#2b3741;
+  --snow:#e2e8eb; --soft:#b8c3ca; --muted:#8797a3;
+  --lamp:#e8a03a; --lamp-ink:#1b1206; --ember:#e07a4c; --blood:#d65a43; --frost:#7cb0d9; --ash:#c4ba54; --moss:#8fbc94;
+  --f-disp:'Unbounded','Golos Text',system-ui,sans-serif;
+  --f-body:'Golos Text',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html{height:100%;box-sizing:border-box;background:var(--ink)}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+body{height:100%;margin:0;background:var(--ink);color:var(--snow);font-family:var(--f-body);font-size:14px;line-height:1.4;overflow:hidden;-webkit-tap-highlight-color:transparent;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) minmax(0,48%);gap:8px;padding-block:8px;max-width:1500px;margin:0 auto}
+@media (min-width:900px){#app{grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto minmax(0,1fr);gap:12px;padding-block:14px}#hud{grid-column:1/-1}#panel{grid-column:2;grid-row:2}#mapWrap{grid-row:2}}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.bad{color:var(--blood)}
+
+#hud{display:grid;gap:6px;min-width:0}
+.hud-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
+.brand{font-family:var(--f-disp);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--lamp)}
+#clock{font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums;display:flex;gap:4px 10px;flex-wrap:wrap}
+#clock .cold{color:var(--frost)} #clock .dim{color:var(--muted)}
+#stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 12px}
+@media (min-width:700px){#stats{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.stat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 6px;align-items:center;min-width:0}
+.stat .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .val{font-family:var(--f-mono);font-size:11px;font-variant-numeric:tabular-nums}
+.stat .bar{grid-column:1/-1;height:4px;background:var(--raise);border-radius:2px;overflow:hidden}
+.stat .bar i{display:block;height:100%;border-radius:2px}
+.stat.crit .lbl,.stat.crit .val{color:var(--blood)}
+#cond{display:flex;flex-wrap:wrap;gap:5px}
+#cond:empty{display:none}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--soft);white-space:nowrap}
+.chip.warm{border-color:var(--lamp);color:var(--lamp)} .chip.cold{color:var(--frost)} .chip.ash{color:var(--ash);border-color:var(--ash)} .chip.bad{color:var(--blood);border-color:var(--blood)}
+
+#mapWrap{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0f1c27;min-height:0}
+#map{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.mapbtns{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px}
+.mapbtns button{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:rgba(21,28,34,.88);color:var(--snow);font:600 17px var(--f-mono);cursor:pointer}
+
+#panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1px solid var(--line);flex:none}
+.tabs.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--muted);font:500 12.5px var(--f-body);padding:11px 2px;cursor:pointer;white-space:nowrap}
+.tabs button.on{color:var(--snow);border-bottom-color:var(--lamp)}
+.tabs .n{font-family:var(--f-mono);font-size:10px;color:var(--lamp);margin-left:3px}
+#pc{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:16px;min-height:0;overscroll-behavior:contain}
+#pc > *{flex:none}
+
+.eyebrow{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h2.loc{font-family:var(--f-disp);font-weight:500;font-size:18px;line-height:1.2;margin:2px 0 4px;text-wrap:balance}
+h3{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+h3.big{font-family:var(--f-disp);font-size:19px;text-transform:none;letter-spacing:0;color:var(--snow);font-weight:500;margin:0}
+.desc{color:var(--soft);margin:0 0 6px;max-width:62ch}
+
+.acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.btn{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:var(--raise);border:1px solid var(--line);color:var(--snow);border-radius:8px;padding:8px 11px;font:500 13.5px var(--f-body);cursor:pointer;min-height:44px;min-width:0}
+.btn small{font-size:11.5px;color:var(--muted);font-weight:400}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn.primary{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp)}
+.btn.primary small{color:var(--lamp-ink);opacity:.72}
+.btn.row{flex-direction:row;align-items:center;justify-content:center}
+.btn.wide{width:100%;grid-column:1/-1}
+button:focus-visible{outline:2px solid var(--frost);outline-offset:2px}
+
+.route{border:1px solid var(--lamp);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--raise)}
+.rname{font-family:var(--f-disp);font-size:15px;font-weight:500}
+.rbt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+
+.items{display:flex;flex-direction:column}
+.items.scroll{overflow:auto;min-height:0;flex:1}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .nm{font-weight:500}
+.item .q{font-family:var(--f-mono);color:var(--muted);font-size:11.5px;margin-left:6px;font-weight:400}
+.item .q.bad{color:var(--blood)}
+.item .ef{font-size:11.5px;color:var(--muted)}
+.item .bt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:190px}
+.sbtn{background:var(--raise);border:1px solid var(--line);color:var(--snow);border-radius:6px;padding:6px 10px;font:500 12.5px var(--f-body);cursor:pointer;min-height:34px;white-space:nowrap}
+.sbtn.ghost{background:none;color:var(--muted)}
+.sbtn:disabled{opacity:.4;cursor:not-allowed}
+.needs{display:flex;flex-wrap:wrap;gap:2px 8px;margin:2px 0}
+.need{font-family:var(--f-mono);font-size:11px;color:var(--moss)} .need.miss{color:var(--blood)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+.rep{font-size:11.5px;text-align:right;color:var(--soft);line-height:1.3}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;color:var(--soft)}
+.kv b{color:var(--snow);font-weight:600}
+.wline{margin:2px 0 6px}
+
+.hp{height:7px;background:var(--raise);border-radius:4px;overflow:hidden}
+.hp.thin{height:3px;margin-top:5px}
+.hp i{display:block;height:100%;background:var(--blood)}
+.hp.you i{background:var(--moss)}
+#tripBar{background:var(--lamp)}
+.hpline{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.log li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;font-size:13px}
+.log time{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);padding-top:2px}
+.log li.bad span{color:var(--blood)} .log li.good span{color:var(--moss)}
+
+#modal{position:fixed;inset:0;background:rgba(6,9,11,.74);display:grid;place-items:center;z-index:50;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;max-height:100%;overflow:auto}
+.card.tall{height:100%;max-height:640px;overflow:hidden}
+.foes{display:flex;flex-direction:column;gap:6px}
+.foe{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--snow);font:500 13.5px var(--f-body);cursor:pointer;text-align:left}
+.foe .hp{grid-column:1/-1}
+.foe.on{border-color:var(--lamp)}
+.foe.dead{opacity:.4}
+.clog{list-style:none;margin:0;padding:8px 10px;background:var(--ink);border-radius:8px;font-size:12.5px;color:var(--soft);display:flex;flex-direction:column;gap:3px;min-height:92px}
+.clog li:last-child{color:var(--snow)}
+.cbtns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+
+#toasts{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:60;padding:0 16px}
+.toast{background:var(--raise);border:1px solid var(--line);color:var(--snow);padding:8px 14px;border-radius:8px;font-size:13px;max-width:440px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:opacity .4s,transform .4s}
+.toast.good{border-color:var(--moss)} .toast.bad{border-color:var(--blood)}
+.toast.out{opacity:0;transform:translateY(-6px)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<div id="app">
+  <header id="hud">
+    <div class="hud-top"><div class="brand">Пепельный тракт</div><div id="clock"></div></div>
+    <div id="stats"></div>
+    <div id="cond"></div>
+  </header>
+  <main id="mapWrap">
+    <canvas id="map" aria-label="Карта: нажми на точку, чтобы проложить маршрут"></canvas>
+    <div class="mapbtns">
+      <button id="zin" data-act="zin" aria-label="Приблизить">+</button>
+      <button id="zout" data-act="zout" aria-label="Отдалить">−</button>
+      <button id="zc" data-act="center" aria-label="К себе">◎</button>
+    </div>
+  </main>
+  <section id="panel">
+    <nav class="tabs" id="tabs"></nav>
+    <div id="pc"></div>
+  </section>
+</div>
+<div id="modal" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+
+<script src="data.js"></script>
+<script src="sim.js"></script>
+<script src="ui.js"></script>
