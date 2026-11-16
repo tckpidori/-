@@ -64,13 +64,14 @@ function renderPlace() {
   if (site) { eb = city ? city.n : BIOME[curBiome]; nm = site.n; }
   else if (city) { eb = city.n; nm = 'Улицы города'; ds = 'Обыскивать можно только здания: приблизь карту и выбери дом.'; }
   else { const nc = nearestCity(); eb = BIOME[curBiome]; nm = 'Глушь'; ds = `${Math.round(nc.d)} км к ${nc.dir} от города ${nc.c.n}.`; }
-  let info = `<div><div class="eyebrow">${eb}</div><h2 class="loc">${esc(nm)}</h2>${ds ? `<p class="desc">${ds}</p>` : ''}<div class="chips">`
+  const pic = art(site ? 'b:' + site.t : city ? 't:street' : 't:' + curBiome);
+  let info = `<div><div class="phead">${pic ? `<span class="ppic">${pic}</span>` : ''}<div><div class="eyebrow">${eb}</div><h2 class="loc">${esc(nm)}</h2></div></div>${ds ? `<p class="desc">${ds}</p>` : ''}<div class="chips">`
     + (site ? '<span class="chip">Укрытие</span>' : '<span class="chip cold">Под открытым небом</span>')
     + (fire ? `<span class="chip warm">Костёр · ещё ${fmtH(g.fire.until - g.time)}</span>` : '')
     + (rad > 0 ? `<span class="chip ash">Заражение: ${owns('geiger') ? (rad * 3.2 * (1 - radProt())).toFixed(1) + ' в час' : rad > 2 ? 'смертельное' : rad > 1 ? 'сильное' : 'слабое'}</span>` : '')
     + (f ? `<span class="chip" style="border-color:${FACTIONS[f].c};color:${FACTIONS[f].c}">${FACTIONS[f].n} · ${repWord(f)}</span>` : '')
     + (fresh ? '<span class="chip cold">Вода рядом</span>' : '') + (snowHere() ? '<span class="chip">Снег</span>' : '') + '</div></div>';
-  const meet = [...new Set(encPool(encCtx()).map(p => ENEMIES[p[0]].n))], A = [];
+  const mk = [...new Set(encPool(encCtx()).map(p => p[0]))], meetH = `<div class="grid small">${mk.map(k => cell(art('e:' + k) || uiIcon('person', '#8797a3'), ENEMIES[k].n)).join('')}</div>`, A = [];
   let finds = '', note = '';
   if (site && site.t === 'base') {
     const bf = baseHere();
@@ -81,11 +82,11 @@ function renderPlace() {
     A.push(btn('search', st.s > 0 ? 'Искать' : 'Обыскано полностью', st.s > 0 ? `${fmtH(m.h)} · осталось заходов: ${st.s} из ${st.m}${rad > 0 ? ' · фонит' : ''}` : 'больше здесь ничего нет', st.s <= 0, 'wide primary'));
     if (st.wr) note = `<p class="desc">В гараже стоит остов: ${VEH[st.wr].n.toLowerCase()}. Восстановить можно на верстаке 3 уровня.</p>`;
     finds = `<div><h3>Здесь можно найти</h3><div class="grid small">${rows.map(r => cell(icon(r[0]), ITEMS[r[0]].n, { tag: Math.round(r.p * 100) + '%' })).join('')}</div></div>`
-      + `<div><h3>Можно встретить${m.dng >= .25 ? ' — <span class="bad">опасное место</span>' : ''}</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
+      + `<div><h3>Можно встретить${m.dng >= .25 ? ' — <span class="bad">опасное место</span>' : ''}</h3>${meetH}</div>`;
   } else {
     const fs = wildFinds();
     finds = (fs.length ? `<div><h3>Здесь можно найти</h3><div class="grid small">${fs.map(k => cell(icon(k), ITEMS[k].n)).join('')}</div></div>` : '')
-      + `<div><h3>Можно встретить</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
+      + `<div><h3>Можно встретить</h3>${meetH}</div>`;
   }
   if (wildOK() && !site) { A.push(btn('forage', 'Собирать', snowHere() ? 'под снегом пусто' : '1,5 ч: ягоды, грибы, травы', snowHere())); A.push(btn('wood', 'Дрова', '1,5 ч' + (owns('axe') ? ', с топором больше' : ''))); A.push(btn('hunt', 'Охота', '3 ч, нужно оружие')); }
   if (fresh) { A.push(btn('water', 'Набрать воды', 'сырая, лучше кипятить')); A.push(btn('fish', 'Рыбачить', owns('fishrod') ? '2 ч' : 'нужна удочка', !owns('fishrod'))); }
@@ -126,13 +127,13 @@ function renderInv() {
 /* ---------- экран «Лагерь» ---------- */
 const SICON = { fire: ['flame', ['#e08a3c', '#7a3c12', '#f8dc8c']], kitchen: ['pot', DRK], bench: ['wrench', PAL.melee], sew: ['needle', PAL.tool], med: ['medkit', PAL.med], rest: ['tent', PAL.wear] };
 let stn = null, rqty = 1, perkSnooze = 0;
-const recipeIcon = r => r.veh ? svgStr(VICON[r.veh], PAL.part) : icon(Object.keys(r.out)[0]);
+const recipeIcon = r => r.veh ? (art('v:' + r.veh) || svgStr(VICON[r.veh], PAL.part)) : icon(Object.keys(r.out)[0]);
 function renderCamp() {
   if (stn) return renderStation();
   const fire = fireOn();
   const tiles = Object.keys(STATIONS).map(k => {
     const S = STATIONS[k], lv = S.up ? g.st[k] : 0, max = S.up ? S.up.length : 0, can = S.up && lv < max && Object.entries(S.up[lv]).every(([i, q]) => has(i, q)), n = RECIPES.filter(r => r.st[0] === k && !craftMiss(r).length).length;
-    return `<button class="stile" data-act="stn" data-arg="${k}"><span class="sic">${svgStr(SICON[k][0], SICON[k][1])}</span><span class="nm">${S.n}</span><small>${k === 'fire' ? (fire ? 'горит ещё ' + fmtH(g.fire.until - g.time) : 'не горит') : lv ? `уровень ${lv} из ${max}` : 'не построено'}</small>${n ? `<i class="bdg">${n}</i>` : ''}${can ? '<i class="upm">▲ можно улучшить</i>' : ''}</button>`;
+    return `<button class="stile" data-act="stn" data-arg="${k}"><span class="sic">${art('s:' + k) || svgStr(SICON[k][0], SICON[k][1])}</span><span class="nm">${S.n}</span><small>${k === 'fire' ? (fire ? 'горит ещё ' + fmtH(g.fire.until - g.time) : 'не горит') : lv ? `уровень ${lv} из ${max}` : 'не построено'}</small>${n ? `<i class="bdg">${n}</i>` : ''}${can ? '<i class="upm">▲ можно улучшить</i>' : ''}</button>`;
   }).join('');
   return `<div class="panes one"><div class="pane"><div class="sgrid">${tiles}</div><p class="desc">Стоянка всегда с тобой. Чем выше уровень станка, тем больше на нём рецептов. Цифра на плитке — сколько вещей можно сделать прямо сейчас.</p></div></div>`;
 }
@@ -223,7 +224,7 @@ function renderCombat() {
   const canHeal = (g.wounds.some(w => w.bl > 0 && !w.b) && (has('bandage') || has('ragband'))) || has('medkit'), gang = c.f && FACTIONS[c.f].gang;
   $('#modal').dataset.kind = 'combat';
   showModal(`<div class="card"><div class="eyebrow">Стычка${c.f ? ' · ' + FACTIONS[c.f].n : ''}</div>
-    <div class="foes">${c.en.map((x, i) => { const e = ENEMIES[x.k]; return `<button class="foe${i === c.tgt ? ' on' : ''}${x.hp <= 0 ? ' dead' : ''}" data-act="cb" data-arg="tgt:${i}"${x.hp <= 0 ? ' disabled' : ''}><span class="fn">${e.n}</span><span class="mono">${x.hp > 0 ? Math.round(x.d) + ' м' : 'убит'}</span><span class="hp"><i style="width:${clamp(x.hp / e.hp * 100, 0, 100)}%"></i></span></button>`; }).join('')}</div>
+    <div class="foes">${c.en.map((x, i) => { const e = ENEMIES[x.k]; return `<button class="foe${i === c.tgt ? ' on' : ''}${x.hp <= 0 ? ' dead' : ''}" data-act="cb" data-arg="tgt:${i}"${x.hp <= 0 ? ' disabled' : ''}><span class="fp">${art('e:' + x.k)}</span><span class="fn">${e.n}</span><span class="mono">${x.hp > 0 ? Math.round(x.d) + ' м' : 'убит'}</span><span class="hp"><i style="width:${clamp(x.hp / e.hp * 100, 0, 100)}%"></i></span></button>`; }).join('')}</div>
     <div class="hpline"><span>Ты</span><span class="mono">${Math.max(0, Math.round(g.s.hp))} / ${maxHp()}</span></div><div class="hp you"><i style="width:${clamp(g.s.hp, 0, 100)}%"></i></div>
     <ul class="clog">${c.log.slice(-5).map(m => `<li>${esc(m)}</li>`).join('')}</ul>
     <div class="cbtns">
@@ -312,10 +313,17 @@ function path(p, close) { cx.beginPath(); for (let i = 0; i < p.length; i++) { c
 function label(t, x, y, col, font, align) { cx.font = font || '600 11px "Golos Text", system-ui, sans-serif'; cx.textAlign = align || 'center'; cx.textBaseline = 'top'; cx.lineWidth = 3; cx.lineJoin = 'round'; cx.strokeStyle = 'rgba(244,238,220,.9)'; cx.strokeText(t, x, y); cx.fillStyle = col || INK; cx.fillText(t, x, y); }
 function box(sx, sy, s, fill, stroke, lw) { const r = s / 2; cx.beginPath(); cx.moveTo(sx - r + 3, sy - r); cx.arcTo(sx + r, sy - r, sx + r, sy + r, 3); cx.arcTo(sx + r, sy + r, sx - r, sy + r, 3); cx.arcTo(sx - r, sy + r, sx - r, sy - r, 3); cx.arcTo(sx - r, sy - r, sx + r, sy - r, 3); cx.closePath(); cx.fillStyle = fill; cx.fill(); cx.lineWidth = lw || 1.3; cx.strokeStyle = stroke; cx.stroke(); }
 function drawSite(s, sx, sy, big) {
-  const st = g.sites[s.id], empty = st && st.s <= 0 && s.t !== 'base', cur = curHere.site === s, isSel = sel && sel.id === s.id, sz = big ? 20 : 15;
+  const st = g.sites[s.id], empty = st && st.s <= 0 && s.t !== 'base', cur = curHere.site === s, isSel = sel && sel.id === s.id;
+  if (ART['b:' + s.t]) {
+    const sz = big ? 46 : 30; cx.fillStyle = 'rgba(58,51,42,.22)'; cx.beginPath(); cx.ellipse(sx, sy + sz * .32, sz * .42, sz * .14, 0, 0, 7); cx.fill();
+    cx.globalAlpha = empty ? .45 : 1; const ok = drawArt(cx, 'b:' + s.t, sx, sy, sz); cx.globalAlpha = 1;
+    if (ok) { if (s.t === 'base') { cx.beginPath(); cx.arc(sx, sy, sz * .62, 0, 7); cx.strokeStyle = FACTIONS[CITY[s.city].f].c; cx.lineWidth = 2.2; cx.stroke(); } if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, sz * .7, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); } return sz; }
+  }
+  const sz = big ? 20 : 15;
   box(sx, sy, sz, empty ? '#d9d1bc' : PAPER, s.t === 'base' ? FACTIONS[CITY[s.city].f].c : INK, s.t === 'base' ? 2.2 : 1.3);
   const im = glyphImg(BICON[s.t], INKP); if (im.complete && im.naturalWidth) { cx.globalAlpha = empty ? .35 : 1; cx.drawImage(im, sx - sz * .34, sy - sz * .34, sz * .68, sz * .68); cx.globalAlpha = 1; }
   if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, sz * .9, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); }
+  return sz;
 }
 function draw() {
   const z = cam.z;
@@ -351,7 +359,7 @@ function draw() {
       const rr = mulberry32(hashStr('st' + c.n)); cx.strokeStyle = 'rgba(58,51,42,.22)'; cx.lineWidth = clamp(z * .35, 1.5, 8);
       for (let i = 0; i < 4 + c.size * 2; i++) { const a = (i % 2 ? Math.PI / 2 : 0) + (rr() - .5) * .5, off = (rr() - .5) * 1.7 * r, nx = Math.cos(a + Math.PI / 2) * off, ny = Math.sin(a + Math.PI / 2) * off; cx.beginPath(); cx.moveTo(sx + nx - Math.cos(a) * r * 1.2, sy + ny - Math.sin(a) * r * 1.2); cx.lineTo(sx + nx + Math.cos(a) * r * 1.2, sy + ny + Math.sin(a) * r * 1.2); cx.stroke(); }
       cx.restore(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 2; cx.strokeStyle = c.f ? FACTIONS[c.f].c : INK; cx.stroke();
-      for (const s of c.sites) { const p = S2(s.x, s.y); if (p[0] < -20 || p[1] < -20 || p[0] > cw + 20 || p[1] > ch + 20) continue; drawSite(s, p[0], p[1], z > 6); if (z > 9) label(s.n, p[0], p[1] + 12, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); }
+      for (const s of c.sites) { const p = S2(s.x, s.y); if (p[0] < -20 || p[1] < -20 || p[0] > cw + 20 || p[1] > ch + 20) continue; const dz = drawSite(s, p[0], p[1], z > 6); if (z > 9) label(s.n, p[0], p[1] + dz * .55 + 2, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); }
       label(c.n, sx, sy - r - 18, INK, '600 13px "Unbounded", "Golos Text", sans-serif');
     } else {
       const rp = Math.max(c.size + 2, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = 'rgba(244,238,220,.7)'; cx.fill(); cx.lineWidth = c.size === 3 ? 2.2 : 1.5; cx.strokeStyle = c.f ? FACTIONS[c.f].c : INK; cx.stroke();
@@ -360,7 +368,7 @@ function draw() {
     }
   }
   // одиночные точки
-  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.6) { drawSite(p.site, sx, sy, z > 6); if (z > 2.5) label(p.n, sx, sy + 12, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = INK; cx.fillRect(sx - 2.5, sy - 2.5, 5, 5); } }
+  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.6) { const dz = drawSite(p.site, sx, sy, z > 6); if (z > 2.5) label(p.n, sx, sy + dz * .55 + 2, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = INK; cx.fillRect(sx - 2.5, sy - 2.5, 5, 5); } }
   // ночь
   const dk = (1 - clamp(Math.sin((hour() - 6) / 15 * Math.PI), 0, 1)) * .42; if (dk > .01) { cx.fillStyle = `rgba(16,24,52,${dk})`; cx.fillRect(0, 0, cw, ch); }
   // маршрут, костёр, транспорт, игрок

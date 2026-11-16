@@ -106,8 +106,26 @@ const ICON = {
 const BICON = { house: 'house', shop: 'cart', pharmacy: 'cross', hospital: 'medkit', garage: 'wrench', gas: 'jerry', warehouse: 'crate', factory: 'factory', police: 'shield', military: 'star', school: 'book', station: 'rail', hunting: 'longgun', izba: 'house', farm: 'sack', sawmill: 'log', checkpoint: 'star', camp: 'tent', zimovye: 'house', meteo: 'device', base: 'ticket' };
 const VICON = { bike: 'bike', moto: 'moto', car: 'car' };
 const svgStr = (gl, p) => `<svg viewBox="0 0 24 24" aria-hidden="true">${(GLY[gl] || GLY.nut).replace(/\{a\}/g, p[0]).replace(/\{b\}/g, p[1]).replace(/\{c\}/g, p[2])}</svg>`;
+/* Рисованные картинки: листы 4×4, ключ → [лист, номер ячейки]. Если листа нет, остаётся значок. */
+const ARTS = {
+  f1: ['canned', 'cfish', 'condmilk', 'crackers', 'choco', 'porridge', 'bpotato', 'meat', 'jerky', 'fishc', 'stew', 'bread', 'berries', 'rawmeat', 'fish', 'potato'],
+  f2: ['mushrooms', 'buckwheat', 'flour', 'salt', 'tealeaf', 'herbs', 'water', 'dirtywater', 'tea', 'herbtea', 'vodka', 'tobacco', 'book', 'matches', 'lighter', 'pot'],
+  m: ['ragband', 'bandage', 'iodine', 'alcohol', 'splint', 'medkit', 'antibiotic', 'charcoaltab', 'coldmed', 'ointment', 'painkiller', 'antirad', 'sewkit', 'toolkit', 'fishrod', 'geiger'],
+  w: ['knife', 'club', 'crowbar', 'shovel', 'axe', 'spear', 'bow', 'arrow', 'shotgun', 'rifle', 'a12', 'a762', 'a9', 'coupon', 'x:map', 'x:compass'],
+  c: ['cap', 'ushanka', 'helmet', 'jacket', 'coat', 'furcoat', 'chemsuit', 'pants', 'warmpants', 'shoes', 'boots', 'valenki', 'unty', 'respirator', 'gasmask', 'vest'],
+  x: ['bag', 'backpack', 'bigpack', 'tent', 'sleepbag', 'wood', 'cloth', 'leather', 'scrap', 'wire', 'nails', 'tape', 'rope', 'rubber', 'coal', 'chemicals'],
+  p: ['gunpowder', 'electronics', 'fuel', 'battery', 'wheel', 'chain', 'bikeframe', 'v:bike', 'v:moto', 'v:car', 's:fire', 's:rest', 's:bench', 's:kitchen', 's:sew', 's:med'],
+  b1: ['b:house', 'b:shop', 'b:pharmacy', 'b:hospital', 'b:garage', 'b:gas', 'b:warehouse', 'b:factory', 'b:police', 'b:military', 'b:school', 'b:station', 'b:hunting', 'b:izba', 'b:farm', 'b:sawmill'],
+  b2: ['b:checkpoint', 'b:camp', 'b:zimovye', 'b:meteo', 'b:base', 't:forest', 't:taiga', 't:steppe', 't:tundra', 't:desert', 't:street', 't:river', 'x:wmoto', 'x:wcar', 'x:rad', 'x:sign'],
+  e: ['e:wolf', 'e:dog', 'e:rat', 'e:boar', 'e:bear', 'e:glowdog', 'e:burnt', 'e:marauder', 'e:gunman', 'e:deserter', 'e:oboz', 'e:rider', 'e:poacher', 'e:soldier', 'e:putguard', 'e:artguard']
+};
+const ART = {}, HAVE = typeof ART_HAVE !== 'undefined' ? ART_HAVE : [];
+for (const sh in ARTS) if (HAVE.includes(sh)) ARTS[sh].forEach((k, i) => { ART[k] = [sh, i]; });
+const art = k => { const a = ART[k]; return a ? `<span class="pi" style="background-image:url(art/${a[0]}.webp);background-position:${(a[1] % 4) / 3 * 100}% ${Math.floor(a[1] / 4) / 3 * 100}%"></span>` : ''; };
+const _sheet = {};
+function drawArt(c, k, x, y, size) { const a = ART[k]; if (!a) return false; let im = _sheet[a[0]]; if (!im) { im = _sheet[a[0]] = new Image(); im.src = 'art/' + a[0] + '.webp'; } if (!im.complete || !im.naturalWidth) return false; const t = im.naturalWidth / 4; c.drawImage(im, (a[1] % 4) * t, Math.floor(a[1] / 4) * t, t, t, x - size / 2, y - size / 2, size, size); return true; }
 const _ic = {};
-function icon(k) { if (_ic[k]) return _ic[k]; const d = ICON[k] || ['nut']; return _ic[k] = svgStr(d[0], d[1] || PAL[ITEMS[k].c] || PAL.mat); }
+function icon(k) { if (_ic[k]) return _ic[k]; const a = art(k); if (a) return _ic[k] = a; const d = ICON[k] || ['nut']; return _ic[k] = svgStr(d[0], d[1] || PAL[ITEMS[k].c] || PAL.mat); }
 const uiIcon = (gl, col) => svgStr(gl, [col || 'currentColor', 'rgba(0,0,0,.45)', 'rgba(255,255,255,.75)']);
 const _img = {};
 function glyphImg(gl, p) { const key = gl + p[0]; if (_img[key]) return _img[key]; const im = new Image(); im.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgStr(gl, p).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" ')); return _img[key] = im; }

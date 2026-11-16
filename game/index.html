@@ -86,16 +86,30 @@ h3.lock{color:var(--blood)}
 .perk .pm svg{width:44px;height:44px}
 .perk small{font-size:11.5px;color:var(--muted)}
 .needs .miss{color:var(--blood)}
+.pi{display:block;width:100%;height:100%;background-repeat:no-repeat;background-size:400% 400%}
+.cell{height:86px}
+.cell .ic,.cell .ic svg{width:46px;height:46px}
+.dic{width:60px;height:60px} .dic svg{width:60px;height:60px}
+.mic{display:block;width:40px;height:40px} .mic svg{width:40px;height:40px}
+.stile .sic{display:block;width:84px;height:84px} .stile .sic svg{width:84px;height:84px}
+.phead{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.ppic{display:block;width:84px;height:84px}
+.foe{grid-template-columns:auto minmax(0,1fr) auto}
+.fp{display:block;width:44px;height:44px;grid-row:span 2}
+.fp:empty{display:none}
+.foe .hp{grid-column:2/-1}
+.perk .pm{display:block}
 @media (orientation:landscape) and (max-height:520px){
   #app{gap:4px;padding-block:4px}
   #nav button{flex-direction:row;justify-content:center;gap:6px;padding:5px 4px;font-size:11.5px}
   #nav button svg{width:18px;height:18px}
   .shead{padding:0 6px 0 12px}
   #sb{padding:8px}
-  .cell{height:64px;padding-top:14px}
-  .cell .ic,.cell .ic svg{width:28px;height:28px}
+  .cell{height:70px;padding-top:12px}
+  .cell .ic,.cell .ic svg{width:38px;height:38px}
+  .ppic{width:56px;height:56px}
   .stile{padding:10px 6px 8px}
-  .stile .sic svg{width:38px;height:38px}
+  .stile .sic,.stile .sic svg{width:56px;height:56px}
   .card{padding:10px;gap:6px}
   .clog{min-height:52px}
 }
@@ -232,5 +246,6 @@ button:focus-visible{outline:2px solid var(--frost);outline-offset:2px}
 
 <script src="data.js"></script>
 <script src="sim.js"></script>
+<script src="art/manifest.js"></script>
 <script src="icons.js"></script>
 <script src="ui.js"></script>
