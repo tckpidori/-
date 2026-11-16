@@ -45,12 +45,62 @@ svg{display:block}
 .rt{display:flex;flex-direction:column;gap:3px;min-width:0}
 .rname{font-family:var(--f-disp);font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-#sheet{position:absolute;left:0;right:0;bottom:0;height:66%;background:var(--panel);border-top:1px solid var(--line);border-radius:12px 12px 0 0;display:flex;flex-direction:column;min-height:0;box-shadow:0 -10px 30px rgba(0,0,0,.35)}
-@media (min-width:820px){#sheet{left:auto;top:0;height:auto;width:min(540px,56%);border-top:0;border-left:1px solid var(--line);border-radius:0}}
+#sheet{position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;min-height:0}
+#sb{overflow:auto;padding:12px;min-height:0;flex:1;overscroll-behavior:contain}
+.panes{display:grid;gap:14px}
+.pane{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pane > *{flex:none}
+.pane.side{background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:12px}
+.pane.side .cell,.pane.side .btn:not(.primary),.pane.side .sbtn{background:var(--panel)}
+.panes.place .pane:first-child{order:2}
+@media (min-aspect-ratio:1/1) and (min-width:620px){
+  #sb{overflow:hidden;display:flex}
+  .panes{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);height:100%;width:100%}
+  .panes.one{grid-template-columns:minmax(0,1fr)}
+  .pane{overflow:auto;min-height:0;overscroll-behavior:contain}
+  .panes.place .pane:first-child{order:0}
+  .invl{grid-template-columns:auto minmax(0,1fr)}
+  .cats{flex-direction:column;overflow:visible}
+}
+.invl{display:grid;gap:10px;align-items:start}
+.cats{display:flex;gap:6px;overflow-x:auto}
+.cat{background:var(--raise);border:1px solid var(--line);color:var(--soft);border-radius:8px;padding:8px 10px;font:500 12.5px var(--f-body);cursor:pointer;white-space:nowrap;text-align:left}
+.cat.sel{border-color:var(--lamp);color:var(--lamp)}
+.invg{display:flex;flex-direction:column;gap:8px;min-width:0}
+.doll{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"head fig back" "mask fig armor" "body fig legs" "melee feet ranged";gap:6px}
+.fig{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted);font-family:var(--f-mono);font-size:11.5px}
+.fig svg{width:72%;max-width:110px;height:auto}
+.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:620px){.sgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.stile{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:16px 8px 12px;color:var(--snow);font-family:var(--f-body);cursor:pointer;min-width:0}
+.stile .sic svg{width:52px;height:52px}
+.stile small{font-size:11.5px;color:var(--muted)}
+.upm{position:absolute;top:5px;left:8px;color:var(--moss);font-style:normal;font-size:10.5px}
+h3.lock{color:var(--blood)}
+.qrow{display:flex;align-items:center;gap:8px}
+.qrow b{font-family:var(--f-mono);min-width:3ch;text-align:center}
+.btn.grow{flex:1}
+.card.wide{max-width:640px}
+.perks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.perk{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:12px 6px;color:var(--snow);font-family:var(--f-body);font-size:13px;cursor:pointer;min-width:0}
+.perk .pm svg{width:44px;height:44px}
+.perk small{font-size:11.5px;color:var(--muted)}
+.needs .miss{color:var(--blood)}
+@media (orientation:landscape) and (max-height:520px){
+  #app{gap:4px;padding-block:4px}
+  #nav button{flex-direction:row;justify-content:center;gap:6px;padding:5px 4px;font-size:11.5px}
+  #nav button svg{width:18px;height:18px}
+  .shead{padding:0 6px 0 12px}
+  #sb{padding:8px}
+  .cell{height:64px;padding-top:14px}
+  .cell .ic,.cell .ic svg{width:28px;height:28px}
+  .stile{padding:10px 6px 8px}
+  .stile .sic svg{width:38px;height:38px}
+  .card{padding:10px;gap:6px}
+  .clog{min-height:52px}
+}
 .shead{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 14px;border-bottom:1px solid var(--line);flex:none;font-family:var(--f-disp);font-size:13px;font-weight:500;letter-spacing:.04em}
 .xbtn{width:36px;height:36px;border-radius:8px;border:0;background:none;color:var(--muted);font-size:16px;cursor:pointer}
-#sb{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:16px;min-height:0;overscroll-behavior:contain;flex:1}
-#sb > *{flex:none}
 
 #nav{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
 #nav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--muted);font:500 10.5px var(--f-body);padding:6px 2px 5px;cursor:pointer;min-width:0}
@@ -87,8 +137,8 @@ h3.big{font-family:var(--f-disp);font-size:19px;text-transform:none;letter-spaci
 .cell.on{border-color:var(--lamp);background:#242f38}
 .cell.dim{opacity:.45}
 
-.detail{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;align-items:center;border:1px solid var(--lamp);border-radius:8px;padding:12px;background:var(--raise);position:sticky;bottom:-14px}
-.detail.col{display:flex;flex-direction:column;align-items:stretch;gap:8px;position:static}
+.detail{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;align-items:center;border:1px solid var(--lamp);border-radius:8px;padding:12px;background:var(--panel)}
+.detail.col{display:flex;flex-direction:column;align-items:stretch;gap:8px}
 .dic svg{width:44px;height:44px}
 .dbt{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
 

@@ -1,10 +1,10 @@
 'use strict';
 /* Правила: состояние, время, потребности, раны, болезни, обыск, бой, торговля, крафт, путь. */
-const { W, H, unproj, mulberry32, hashStr, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, LAKES, RIVERS, SEAS, ISLES, fbm, hash2 } = D;
+const { W, H, unproj, mulberry32, hashStr, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, LAKES, RIVERS, SEAS, ISLES, fbm, hash2, STATIONS, PERKS } = D;
 const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.floor(rnd(a, b + 1)), chance = p => Math.random() < p, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
 const pickW = l => { let t = 0; for (const x of l) t += x[1]; let r = Math.random() * t; for (const x of l) { r -= x[1]; if (r <= 0) return x; } return l[l.length - 1]; };
 const WEATHER = { clear: { n: 'Ясно', t: 0 }, cloud: { n: 'Пасмурно', t: -1 }, rain: { n: 'Дождь', t: -3 }, snow: { n: 'Снег', t: -2 }, blizzard: { n: 'Метель', t: -7 } };
-const SAVE_KEY = 'pepel-trakt-v2';
+const SAVE_KEY = 'pepel-trakt-v3';
 
 let g = null, curHere = { city: null, site: null }, curBiome = 'forest', trip = null, combatCb = null;
 const UIH = { toast() {}, refresh() {}, combat() {}, over() {}, tripEnd() {} };
@@ -16,10 +16,11 @@ const take = (k, n = 1) => { g.inv[k] = (g.inv[k] || 0) - n; if (g.inv[k] <= 1e-
 const owns = k => has(k) || Object.values(g.eq).includes(k);
 function weight() { let w = 0; for (const k in g.inv) w += ITEMS[k].w * g.inv[k]; return w; }
 const withVeh = () => g.veh && !g.veh.parked;
-function capacity() { const b = g.eq.back; return 30 + (b ? ITEMS[b].cap : 0) + (withVeh() ? VEH[g.veh.t].cap : 0); }
-function wearWarm() { let w = 0; for (const s of ['head', 'body', 'legs', 'feet']) { const k = g.eq[s]; if (k) w += ITEMS[k].warm || 0; } return w; }
+const pk = id => (g.perks && g.perks[id]) || 0;
+function capacity() { const b = g.eq.back; return 30 + (b ? ITEMS[b].cap : 0) + (withVeh() ? VEH[g.veh.t].cap : 0) + 5 * pk('mule'); }
+function wearWarm() { let w = 0; for (const s of ['head', 'body', 'legs', 'feet']) { const k = g.eq[s]; if (k) w += ITEMS[k].warm || 0; } return w + 3 * pk('hardy'); }
 function armor() { let a = 0; for (const s of ['head', 'body', 'armor']) { const k = g.eq[s]; if (k) a += ITEMS[k].arm || 0; } return a; }
-function radProt() { let p = 0; for (const s of ['mask', 'body']) { const k = g.eq[s]; if (k) p += ITEMS[k].prot || 0; } return Math.min(.9, p); }
+function radProt() { let p = 0; for (const s of ['mask', 'body']) { const k = g.eq[s]; if (k) p += ITEMS[k].prot || 0; } return Math.min(.9, p + .08 * pk('lead')); }
 function log(m, k = '') { g.log.push({ t: g.time, m, k }); if (g.log.length > 140) g.log.shift(); }
 const fmtGot = got => Object.entries(got).map(([k, q]) => `${ITEMS[k].n} ×${Number.isInteger(q) ? q : q.toFixed(1)}`).join(', ');
 const gkey = () => curHere.site ? curHere.site.id : 'w' + Math.round(g.pos.x) + '_' + Math.round(g.pos.y);
@@ -81,13 +82,14 @@ const fireOn = () => !!(g.fire && g.time < g.fire.until && hyp(g.fire.x - g.pos.
 function newGame() {
   const s0 = CITY['Рязань'].sites.find(s => s.t === 'house');
   g = {
-    v: 2, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: s0.x, y: s0.y },
+    v: 3, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: s0.x, y: s0.y },
     s: { hp: 100, hunger: 75, thirst: 75, warmth: 80, rad: 0, mood: 60 },
     inv: { crackers: 2, water: 2, matches: 6, ragband: 1, cloth: 2 },
     eq: { melee: 'knife', ranged: null, head: null, body: 'jacket', legs: 'pants', feet: 'shoes', mask: null, armor: null, back: null },
     veh: null, wounds: [], dis: {}, pk: 0, fire: null, sites: {}, ground: {}, found: {}, rep: {}, stock: {},
     sk: { surv: [0, 0], med: [0, 0], mech: [0, 0], fight: [0, 0] },
-    weather: 'clear', wLeft: 6, log: [], warn: {}, stats: { km: 0, kills: 0, searched: 0 }, over: null, combat: null
+    weather: 'clear', wLeft: 6, log: [], warn: {}, stats: { km: 0, kills: 0, searched: 0 }, over: null, combat: null,
+    st: { kitchen: 0, bench: 0, sew: 0, med: 0, rest: 0 }, lvl: 1, xp: 0, perks: {}, perkPts: 0, perkOffer: null
   };
   for (const k in FACTIONS) g.rep[k] = FACTIONS[k].rep;
   locate(); discover();
@@ -96,11 +98,12 @@ function newGame() {
   return g;
 }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(g)); } catch (e) { /* хранилище недоступно */ } }
-function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 2 && o.pos && o.ground) return o; } } catch (e) { /* нет сохранения */ } return null; }
+function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 3 && o.pos && o.ground && o.st) return o; } } catch (e) { /* нет сохранения */ } return null; }
 
 /* ---------- навыки ---------- */
 const xpNeed = l => 20 * (l + 1);
-function addXp(s, n) { const k = g.sk[s]; k[1] += n; while (k[1] >= xpNeed(k[0])) { k[1] -= xpNeed(k[0]); k[0]++; log(`Навык «${SKILLS[s]}» вырос до ${k[0]}.`, 'good'); UIH.toast(`${SKILLS[s]}: уровень ${k[0]}`, 'good'); } }
+function addXp(s, n) { const k = g.sk[s]; k[1] += n; while (k[1] >= xpNeed(k[0])) { k[1] -= xpNeed(k[0]); k[0]++; log(`Навык «${SKILLS[s]}» вырос до ${k[0]}.`, 'good'); UIH.toast(`${SKILLS[s]}: уровень ${k[0]}`, 'good'); } g.xp += n; while (g.xp >= lvlNeed(g.lvl)) { g.xp -= lvlNeed(g.lvl); g.lvl++; g.perkPts++; log(`Новый уровень: ${g.lvl}. Доступна способность.`, 'good'); UIH.toast(`Уровень ${g.lvl}: выбери способность`, 'good'); } }
+const lvlNeed = l => 30 + 20 * l;
 
 /* ---------- потребности, раны, болезни ---------- */
 const painLevel = () => g.time < g.pk ? 0 : g.wounds.reduce((a, w) => a + WOUNDS[w.t].pain, 0);
@@ -121,9 +124,9 @@ function step(dt, ctx) {
   if (ds.cold || ds.pneumonia) tm *= 1.2;
   if (s.rad >= 30) hm *= 1.2;
   if (T > 28) tm *= 1.4;
-  s.hunger -= 2 * dt * hm; s.thirst -= 2.9 * dt * tm;
+  const thr = 1 - .06 * pk('thrifty'); s.hunger -= 2 * dt * hm * thr; s.thirst -= 2.9 * dt * tm * thr;
   let comfort = T + wearWarm() * 1.5 + (fire ? 22 : 0) + (shelter ? 6 : 0) + (legs ? 4 : 0) + (mv === 'car' ? 10 : 0);
-  if (rest) comfort += (owns('sleepbag') ? 6 : 0) + (!shelter && owns('tent') ? 8 : 0);
+  if (rest) comfort += (owns('sleepbag') ? 6 : 0) + (!shelter && owns('tent') ? 8 : 0) + (g.st.rest >= 2 ? 5 : 0);
   if (!shelter && mv !== 'car') { if (g.weather === 'rain') comfort -= 4; if (g.weather === 'blizzard') comfort -= 5; }
   const e = comfort - 12;
   s.warmth += (e >= 0 ? Math.min(12, 2 + e * .5) : Math.max(-9, e * .3)) * dt;
@@ -134,13 +137,13 @@ function step(dt, ctx) {
   if (fire && rest) md += 1.6; else if (rest && shelter) md += .6;
   if (s.hunger < 20 || s.thirst < 20) md -= .6;
   md -= painLevel() * .15; if (Object.keys(ds).length) md -= .3;
-  s.mood += md * dt;
+  s.mood += (md < 0 ? md * (1 - .2 * pk('calm')) : md) * dt;
   let bleed = 0;
   for (let i = g.wounds.length - 1; i >= 0; i--) {
     const w = g.wounds[i], d = WOUNDS[w.t];
     if (w.bl > 0 && !w.b) { bleed += w.bl; w.bl = Math.max(0, w.bl - d.clot * dt); }
     if (d.inf && !w.c && !ds.infection && chance(d.inf * (w.b === 1 ? 1.3 : w.b === 2 ? .6 : 1) * dt)) getSick('infection', 'Рана воспалилась: заражение крови. Нужны антибиотики.');
-    let hs = 1; if (d.bleed && !w.b && w.bl > 0) hs = .3; if (w.t === 'fracture' && !w.sp) hs = .35; if (rest) hs *= 1.5; hs *= 1 + .1 * g.sk.med[0];
+    let hs = 1; if (d.bleed && !w.b && w.bl > 0) hs = .3; if (w.t === 'fracture' && !w.sp) hs = .35; if (rest) hs *= 1.5; hs *= 1 + .1 * g.sk.med[0] + .15 * pk('healer');
     w.h -= dt * hs;
     if (w.h <= 0) { g.wounds.splice(i, 1); log(`Зажило: ${d.n.toLowerCase()}.`, 'good'); }
   }
@@ -157,7 +160,7 @@ function step(dt, ctx) {
   src(bleed, 'от потери крови');
   for (const k in ds) src(DIS[k].hp, 'от болезни (' + DIS[k].n.toLowerCase() + ')');
   if (dmg > 0) { s.hp -= dmg * dt; g.cause = cause; }
-  else if (s.hunger > 30 && s.thirst > 30 && s.warmth > 35 && s.rad < 30) s.hp += (rest ? 1.6 : .4) * (1 + .1 * g.sk.med[0]) * dt;
+  else if (s.hunger > 30 && s.thirst > 30 && s.warmth > 35 && s.rad < 30) s.hp += (rest ? 1.6 * (1 + .25 * g.st.rest) : .4) * (1 + .1 * g.sk.med[0]) * dt;
   clampS();
   if (s.hp <= 0) die('Погиб ' + (g.cause || 'от ран'));
 }
@@ -242,7 +245,7 @@ function actSearch() {
   pass(m.h, {}); if (g.over) return done();
   st.s--; g.stats.searched++;
   const zone = radAt(g.pos.x, g.pos.y) > .1;
-  const loot = () => { const got = {}, bonus = 1 + .06 * g.sk.surv[0] + (owns('crowbar') ? .12 : 0); for (const r of m.loot) if (chance(Math.min(.95, r.p * bonus))) got[r[0]] = (got[r[0]] || 0) + (r.length > 2 ? ri(r[2], r[3]) : 1); addXp('surv', 2); found(got, s.n); };
+  const loot = () => { const got = {}, bonus = 1 + .06 * g.sk.surv[0] + (owns('crowbar') ? .12 : 0) + .08 * pk('scout'); for (const r of m.loot) if (chance(Math.min(.95, r.p * bonus))) got[r[0]] = (got[r[0]] || 0) + (r.length > 2 ? ri(r[2], r[3]) : 1); addXp('surv', 2); found(got, s.n); };
   if (chance(m.dng * (isNight() ? 1.4 : 1) * (zone ? 1.3 : 1) * (friendlyCity() ? .3 : 1))) {
     return startCombat(makeEncounter(m.mil ? 'mil' : 'city'), { close: true, intro: `${m.n}: внутри кто-то есть.` }, res => { if (res === 'win') loot(); else { log('Обыск сорван.', 'bad'); st.s++; } done(); });
   }
@@ -260,7 +263,7 @@ function actUse(k) {
   if (u.pk) g.pk = g.time + u.pk;
   if (u.kit) { for (const w of g.wounds) { const d = WOUNDS[w.t]; if (d.bleed) w.b = 2; if (d.inf) w.c = 1; } addXp('med', 4); }
   if (u.burn) for (const w of g.wounds) if (w.t === 'burn') w.h *= .5;
-  if (u.poison && chance(u.poison)) getSick('poison', 'Живот скрутило: отравление.');
+  if (u.poison && chance(u.poison * Math.max(0, 1 - .3 * pk('stomach')))) getSick('poison', 'Живот скрутило: отравление.');
   if (u.dys && chance(u.dys)) getSick('dysentery', 'Вода была плохой: дизентерия.');
   if (k === 'dirtywater' && radAt(g.pos.x, g.pos.y) > .2) s.rad += 5;
   clampS(); if (u.time) pass(u.time, { rest: true }); else g.time += .05;
@@ -280,6 +283,7 @@ function actTreat(i, kind) {
 const wreckHere = t => { const s = curHere.site; if (!s) return null; const st = siteState(s); return st.wr === t ? st : null; };
 function craftMiss(r) {
   const m = [];
+  if (r.st[1] > 0 && g.st[r.st[0]] < r.st[1]) m.push(`${STATIONS[r.st[0]].n}, ур. ${r.st[1]}`);
   for (const k in r.need) if (!has(k, r.need[k])) m.push(ITEMS[k].n);
   for (const t of r.tools || []) if (!owns(t)) m.push(ITEMS[t].n);
   if (r.fire && !fireOn()) m.push('костёр');
@@ -289,22 +293,35 @@ function craftMiss(r) {
   return m;
 }
 const craftTime = r => r.h * Math.max(.5, 1 - .08 * g.sk.mech[0]) * (g.s.mood < 25 ? 1.3 : 1);
-function actCraft(id) {
+function actCraft(id, n) {
   const r = RECIPES.find(x => x.id === id); if (!r || craftMiss(r).length) return;
-  for (const k in r.need) take(k, r.need[k]);
-  pass(craftTime(r), {}); if (g.over) return done();
+  n = r.veh ? 1 : Math.max(1, n || 1); let made = 0;
+  for (let i = 0; i < n && !craftMiss(r).length; i++) {
+    for (const k in r.need) take(k, r.need[k]);
+    pass(craftTime(r), {}); if (g.over) return done();
+    made++; if (!r.veh) for (const k in r.out) add(k, r.out[k]);
+    if (r.xp) addXp(r.xp[0], r.xp[1]); else addXp('surv', 1);
+  }
   if (r.veh) { if (r.wr) wreckHere(r.wr).wr = null; if (g.veh) log(`${VEH[g.veh.t].n} оставлен.`); g.veh = { t: r.veh, parked: null }; log(`Готово: ${VEH[r.veh].n.toLowerCase()}.`, 'good'); UIH.toast(VEH[r.veh].n + ' на ходу', 'good'); }
-  else { for (const k in r.out) add(k, r.out[k]); const t = fmtGot(r.out); log(`${r.n}: ${t}.`, 'good'); UIH.toast('Готово: ' + t, 'good'); }
-  if (r.xp) addXp(r.xp[0], r.xp[1]);
+  else { const got = {}; for (const k in r.out) got[k] = r.out[k] * made; const t = fmtGot(got); log(`${r.n}: ${t}.`, 'good'); UIH.toast('Готово: ' + t, 'good'); }
   done();
 }
+function actUpgrade(k) {
+  const S = STATIONS[k]; if (!S || !S.up) return; const lv = g.st[k], cost = S.up[lv]; if (!cost) return;
+  for (const i in cost) if (!has(i, cost[i])) return UIH.toast('Не хватает: ' + ITEMS[i].n, 'bad');
+  for (const i in cost) take(i, cost[i]);
+  pass(1, {}); if (g.over) return done();
+  g.st[k]++; addXp('mech', 8); log(`${S.n}: уровень ${g.st[k]}.`, 'good'); UIH.toast(`${S.n}: уровень ${g.st[k]}`, 'good'); done();
+}
+function perkOffer() { if (!g.perkOffer) { const ids = Object.keys(PERKS).filter(k => pk(k) < 3), o = []; while (o.length < 3 && ids.length) o.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]); g.perkOffer = o; } return g.perkOffer; }
+function actPerk(id) { if (g.perkPts <= 0 || !g.perkOffer || !g.perkOffer.includes(id)) return; g.perks[id] = pk(id) + 1; g.perkPts--; g.perkOffer = null; log(`Способность: ${PERKS[id].n}, уровень ${pk(id)}.`, 'good'); clampS(); done(); }
 
 /* ---------- транспорт и путь ---------- */
 function moveMode() {
   const w = weight(), cap = capacity(); let sp = 5, fuel = 0, id = 'foot', by = 'пешком', blocked = null;
   if (withVeh()) { const v = VEH[g.veh.t]; if (v.fuel && !has('fuel', .05)) blocked = 'Нет бензина. Заправься или оставь транспорт.'; else { sp = v.sp; fuel = v.fuel || 0; id = g.veh.t; by = v.by; } }
   const snow = snowHere(), fr = g.wounds.find(x => x.t === 'fracture');
-  if (id === 'foot') { if (snow) sp *= .8; if (isNight()) sp *= .9; if (fr) sp *= fr.sp ? .7 : .5; }
+  if (id === 'foot') { sp *= 1 + .08 * pk('walker'); if (snow) sp *= .8; if (isNight()) sp *= .9; if (fr) sp *= fr.sp ? .7 : .5; }
   if (id === 'bike') { if (snow) sp *= .5; if (fr) sp *= .6; }
   if (g.weather === 'blizzard') sp *= .6; else if (g.weather === 'rain') sp *= .9;
   if (w > cap * 1.4) blocked = 'Слишком тяжело. Выложи лишнее.'; else if (w > cap) sp *= .5;
@@ -362,7 +379,7 @@ function startCombat(enc, opt, cb) {
   g.combat = { en, tgt: 0, f: e.f || null, log: [(opt.intro ? opt.intro + ' ' : '') + `Противник: ${who}.`] };
   combatCb = cb; trip = null; UIH.combat();
 }
-function playerAcc(w, d) { const base = w.rng ? (d > w.rng ? .1 : w.acc - d / w.rng * .45) : .85; return clamp(base + .04 * g.sk.fight[0] - .05 * painLevel() - (g.s.mood < 25 ? .12 : 0), .08, .96); }
+function playerAcc(w, d) { const base = w.rng ? (d > w.rng ? .1 : w.acc - d / w.rng * .45) : .85; return clamp(base + (w.rng ? .04 * pk('marksman') : 0) + .04 * g.sk.fight[0] - .05 * painLevel() - (g.s.mood < 25 ? .12 : 0), .08, .96); }
 const fleeChance = () => { const c = g.combat, al = c.en.filter(x => x.hp > 0), md = Math.min(...al.map(x => x.d)); return clamp(.3 + md / 50 * .4 + (withVeh() ? .25 : 0) - (g.wounds.some(x => x.t === 'fracture') ? .25 : 0) - (al.some(x => ENEMIES[x.k].rng >= x.d) ? .15 : 0), .08, .95); };
 const bribeCost = () => 12 * g.combat.en.filter(x => x.hp > 0).length;
 function hitPlayer(x, e, push) {
@@ -382,7 +399,7 @@ function cAct(a, arg) {
   if (a === 'melee') {
     const w = g.eq.melee ? ITEMS[g.eq.melee] : { n: 'Кулаки', dmg: [2, 4], reach: 2 };
     if (t.d > w.reach) { push(`До цели ${Math.round(t.d)} м — слишком далеко для удара.`); return UIH.combat(); }
-    if (chance(playerAcc(w, t.d))) { const dmg = Math.round(ri(w.dmg[0], w.dmg[1]) * fl); t.hp -= dmg; push(`${w.n}: ${te.n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); } else push(`${w.n}: мимо.`);
+    if (chance(playerAcc(w, t.d))) { const dmg = Math.round(ri(w.dmg[0], w.dmg[1]) * fl * (1 + .1 * pk('heavy'))); t.hp -= dmg; push(`${w.n}: ${te.n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); } else push(`${w.n}: мимо.`);
   } else if (a === 'ranged') {
     const w = g.eq.ranged ? ITEMS[g.eq.ranged] : null; if (!w || !has(w.ammo)) { push('Стрелять нечем.'); return UIH.combat(); }
     const shots = Math.min(w.burst || 1, g.inv[w.ammo]);

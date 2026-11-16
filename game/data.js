@@ -402,5 +402,34 @@ window.D = (function () {
   const SKILLS = { surv: 'Выживание', med: 'Медицина', mech: 'Механика', fight: 'Бой' };
   const SKILLD = { surv: 'Больше находок при обыске, охоте и сборе.', med: 'Раны заживают быстрее, лечение эффективнее.', mech: 'Нужна для техники и патронов. Крафт быстрее.', fight: 'Точность и урон в бою.' };
 
-  return { W, H, proj, unproj, hash2, vnoise, fbm, mulberry32, hashStr, SEAS, ISLES, LAKES, RIVERS, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, CITYSET, CITYEXTRA, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD };
+  /* ---------- станки лагеря и способности ---------- */
+  const STATIONS = {
+    fire: { n: 'Костёр', d: 'Простая готовка на огне. Костёр нужно разводить из дров, со временем он гаснет.' },
+    kitchen: { n: 'Полевая кухня', d: 'Котлы и решётка над огнём: каши, похлёбки, заготовки впрок.', up: [{ scrap: 2, wood: 2 }, { scrap: 4, wire: 2 }] },
+    bench: { n: 'Верстак', d: 'Оружие, инструмент и техника.', up: [{ wood: 4, nails: 2, scrap: 2 }, { scrap: 6, wire: 3 }, { scrap: 10, electronics: 3 }] },
+    sew: { n: 'Швейный стол', d: 'Одежда, сумки, палатка и спальник.', up: [{ wood: 2, cloth: 3 }, { cloth: 6, leather: 2 }] },
+    med: { n: 'Знахарский стол', d: 'Перевязки, шины, отвары и порошки.', up: [{ wood: 2, cloth: 2 }, { alcohol: 1, cloth: 4 }] },
+    rest: { n: 'Лежанка', d: 'Каждый уровень ускоряет лечение на отдыхе. На втором уровне отдыхать теплее.', up: [{ wood: 3, cloth: 3 }, { cloth: 6, leather: 2 }] }
+  };
+  const RST = { boil: ['fire', 0], melt: ['fire', 0], meat: ['fire', 0], fishc: ['fire', 0], bpotato: ['fire', 0],
+    filter: ['kitchen', 1], tea: ['kitchen', 1], porridge: ['kitchen', 1], bread: ['kitchen', 1], stew: ['kitchen', 2], jerky: ['kitchen', 2],
+    ragband: ['med', 0], splint: ['med', 0], bandage: ['med', 1], charcoaltab: ['med', 1], herbtea: ['med', 1],
+    club: ['bench', 0], fishrod: ['bench', 0], spear: ['bench', 1], arrow: ['bench', 1], bow: ['bench', 1], respirator: ['bench', 1], bike: ['bench', 2], gunpowder: ['bench', 2], a12: ['bench', 2], moto: ['bench', 3], car: ['bench', 3],
+    cap: ['sew', 1], bag: ['sew', 1], coat: ['sew', 1], warmpants: ['sew', 1], ushanka: ['sew', 2], furcoat: ['sew', 2], unty: ['sew', 2], backpack: ['sew', 2], tent: ['sew', 2], sleepbag: ['sew', 2] };
+  for (const r of RECIPES) r.st = RST[r.id] || ['bench', 0];
+  const PERKS = {
+    scout: { n: 'Следопыт', d: 'При обыске находится больше: +8% за уровень.' },
+    mule: { n: 'Вьючный', d: 'Переносимый груз +5 кг за уровень.' },
+    stomach: { n: 'Крепкий желудок', d: 'Шанс отравиться едой ниже на 30% за уровень.' },
+    marksman: { n: 'Меткий глаз', d: 'Точность стрельбы +4% за уровень.' },
+    heavy: { n: 'Тяжёлая рука', d: 'Урон в ближнем бою +10% за уровень.' },
+    healer: { n: 'Знахарь', d: 'Раны заживают на 15% быстрее за уровень.' },
+    hardy: { n: 'Закалённый', d: 'Тепло одежды +3 за уровень.' },
+    walker: { n: 'Ходок', d: 'Скорость пешком +8% за уровень.' },
+    lead: { n: 'Свинцовая шкура', d: 'Защита от радиации +8% за уровень.' },
+    calm: { n: 'Хладнокровие', d: 'Настрой падает на 20% медленнее за уровень.' },
+    thrifty: { n: 'Запасливый', d: 'Голод и жажда растут на 6% медленнее за уровень.' }
+  };
+
+  return { W, H, proj, unproj, hash2, vnoise, fbm, mulberry32, hashStr, SEAS, ISLES, LAKES, RIVERS, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, CITYSET, CITYEXTRA, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, STATIONS, PERKS };
 })();

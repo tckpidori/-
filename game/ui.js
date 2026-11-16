@@ -45,7 +45,7 @@ function renderHud() {
   $('#cond').innerHTML = c.map(x => `<span class="chip ${x[0]}">${x[1]}</span>`).join('');
 }
 function renderNav() {
-  const bad = { place: Object.keys(groundHere()).length, camp: RECIPES.filter(r => !craftMiss(r).length).length, char: g.wounds.length + Object.keys(g.dis).length };
+  const bad = { place: Object.keys(groundHere()).length, camp: RECIPES.filter(r => !craftMiss(r).length).length, char: g.wounds.length + Object.keys(g.dis).length + g.perkPts };
   $('#nav').innerHTML = [['map', 'mapf', 'Карта'], ['place', 'lens', 'Место'], ['inv', 'pack', 'Рюкзак'], ['camp', 'tent', 'Лагерь'], ['char', 'person', 'Герой'], ['world', 'globe', 'Мир']].map(n => `<button class="${scr === n[0] ? 'on' : ''}" data-act="scr" data-arg="${n[0]}">${uiIcon(n[1])}<span>${n[2]}</span>${bad[n[0]] ? `<i class="bdg">${bad[n[0]]}</i>` : ''}</button>`).join('');
 }
 function renderRoute() {
@@ -62,38 +62,38 @@ function renderPlace() {
   const { city, site } = curHere, fire = fireOn(), rad = radAt(g.pos.x, g.pos.y), f = factionAt(g.pos.x, g.pos.y), fresh = freshDist() <= 12;
   let eb, nm, ds = '';
   if (site) { eb = city ? city.n : BIOME[curBiome]; nm = site.n; }
-  else if (city) { eb = city.n; nm = 'Улицы города'; ds = 'Приблизь карту и выбери здание — обыскивать можно только внутри.'; }
+  else if (city) { eb = city.n; nm = 'Улицы города'; ds = 'Обыскивать можно только здания: приблизь карту и выбери дом.'; }
   else { const nc = nearestCity(); eb = BIOME[curBiome]; nm = 'Глушь'; ds = `${Math.round(nc.d)} км к ${nc.dir} от города ${nc.c.n}.`; }
-  let h = `<div><div class="eyebrow">${eb}</div><h2 class="loc">${esc(nm)}</h2>${ds ? `<p class="desc">${ds}</p>` : ''}<div class="chips">`
+  let info = `<div><div class="eyebrow">${eb}</div><h2 class="loc">${esc(nm)}</h2>${ds ? `<p class="desc">${ds}</p>` : ''}<div class="chips">`
     + (site ? '<span class="chip">Укрытие</span>' : '<span class="chip cold">Под открытым небом</span>')
     + (fire ? `<span class="chip warm">Костёр · ещё ${fmtH(g.fire.until - g.time)}</span>` : '')
     + (rad > 0 ? `<span class="chip ash">Заражение: ${owns('geiger') ? (rad * 3.2 * (1 - radProt())).toFixed(1) + ' в час' : rad > 2 ? 'смертельное' : rad > 1 ? 'сильное' : 'слабое'}</span>` : '')
     + (f ? `<span class="chip" style="border-color:${FACTIONS[f].c};color:${FACTIONS[f].c}">${FACTIONS[f].n} · ${repWord(f)}</span>` : '')
     + (fresh ? '<span class="chip cold">Вода рядом</span>' : '') + (snowHere() ? '<span class="chip">Снег</span>' : '') + '</div></div>';
-  const meet = [...new Set(encPool(encCtx()).map(p => ENEMIES[p[0]].n))];
-  let info = '';
+  const meet = [...new Set(encPool(encCtx()).map(p => ENEMIES[p[0]].n))], A = [];
+  let finds = '', note = '';
   if (site && site.t === 'base') {
     const bf = baseHere();
-    h += `<div><h3>Торговец · ${FACTIONS[bf].n}</h3>${canTrade(bf) ? btn('trade', 'Торговать', `талонов: ${g.inv.coupon || 0} · отношение: ${repWord(bf)}`, false, 'wide primary') : `<p class="desc">С тобой здесь не торгуют: отношение «${repWord(bf)}».</p>`}</div>`;
+    if (canTrade(bf)) A.push(btn('trade', 'Торговать', `талонов: ${g.inv.coupon || 0} · отношение: ${repWord(bf)}`, false, 'wide primary'));
+    else note = `<p class="desc">${FACTIONS[bf].n}: с тобой здесь не торгуют, отношение «${repWord(bf)}».</p>`;
   } else if (site) {
     const st = siteState(site), m = BUILD[site.t], rows = m.loot.slice().sort((a, b) => b.p - a.p);
-    h += btn('search', st.s > 0 ? 'Искать' : 'Обыскано полностью', st.s > 0 ? `${fmtH(m.h)} · осталось заходов: ${st.s} из ${st.m}${rad > 0 ? ' · фонит' : ''}` : 'больше здесь ничего нет', st.s <= 0, 'wide primary');
-    if (st.wr) info += `<p class="desc">В гараже стоит остов: ${VEH[st.wr].n.toLowerCase()}. Его можно восстановить — рецепт в «Лагере».</p>`;
-    info += `<div><h3>Здесь можно найти</h3><div class="grid">${rows.map(r => cell(icon(r[0]), ITEMS[r[0]].n, { tag: Math.round(r.p * 100) + '%' })).join('')}</div></div>`;
-    info += `<div><h3>Можно встретить${m.dng >= .25 ? ' — <span class="bad">опасное место</span>' : ''}</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
+    A.push(btn('search', st.s > 0 ? 'Искать' : 'Обыскано полностью', st.s > 0 ? `${fmtH(m.h)} · осталось заходов: ${st.s} из ${st.m}${rad > 0 ? ' · фонит' : ''}` : 'больше здесь ничего нет', st.s <= 0, 'wide primary'));
+    if (st.wr) note = `<p class="desc">В гараже стоит остов: ${VEH[st.wr].n.toLowerCase()}. Восстановить можно на верстаке 3 уровня.</p>`;
+    finds = `<div><h3>Здесь можно найти</h3><div class="grid small">${rows.map(r => cell(icon(r[0]), ITEMS[r[0]].n, { tag: Math.round(r.p * 100) + '%' })).join('')}</div></div>`
+      + `<div><h3>Можно встретить${m.dng >= .25 ? ' — <span class="bad">опасное место</span>' : ''}</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
   } else {
     const fs = wildFinds();
-    if (fs.length) info += `<div><h3>Здесь можно найти</h3><div class="grid">${fs.map(k => cell(icon(k), ITEMS[k].n)).join('')}</div></div>`;
-    info += `<div><h3>Можно встретить</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
+    finds = (fs.length ? `<div><h3>Здесь можно найти</h3><div class="grid small">${fs.map(k => cell(icon(k), ITEMS[k].n)).join('')}</div></div>` : '')
+      + `<div><h3>Можно встретить</h3><div class="chips flat">${meet.map(n => `<span class="chip">${n}</span>`).join('')}</div></div>`;
   }
-  const A = [];
   if (wildOK() && !site) { A.push(btn('forage', 'Собирать', snowHere() ? 'под снегом пусто' : '1,5 ч: ягоды, грибы, травы', snowHere())); A.push(btn('wood', 'Дрова', '1,5 ч' + (owns('axe') ? ', с топором больше' : ''))); A.push(btn('hunt', 'Охота', '3 ч, нужно оружие')); }
   if (fresh) { A.push(btn('water', 'Набрать воды', 'сырая, лучше кипятить')); A.push(btn('fish', 'Рыбачить', owns('fishrod') ? '2 ч' : 'нужна удочка', !owns('fishrod'))); }
-  if (A.length) h += `<div class="acts">${A.join('')}</div>`;
+  if (withVeh()) A.push(btn('park', 'Оставить транспорт', VEH[g.veh.t].n)); else if (g.veh && hyp(g.veh.parked.x - g.pos.x, g.veh.parked.y - g.pos.y) <= 3) A.push(btn('board', 'Сесть', VEH[g.veh.t].n));
   const gr = groundHere(), gk = Object.keys(gr);
-  h += `<div><div class="hrow"><h3>На земле</h3><button class="sbtn" data-act="pickall"${gk.length ? '' : ' disabled'}>Подобрать всё</button></div>`
-    + (gk.length ? `<div class="grid">${gk.map(k => cell(icon(k), ITEMS[k].n, { n: qty(gr[k]), act: 'pick', arg: k })).join('')}</div>` : '<p class="desc">Пусто. Найденное появится здесь. Сюда же можно выложить лишнее из рюкзака — оно останется лежать.</p>') + '</div>';
-  return h + info;
+  const left = `<div class="hrow"><h3>На земле</h3><button class="sbtn hot" data-act="pickall"${gk.length ? '' : ' disabled'}>Подобрать всё</button></div>`
+    + (gk.length ? `<div class="grid">${gk.map(k => cell(icon(k), ITEMS[k].n, { n: qty(gr[k]), act: 'pick', arg: k })).join('')}</div>` : '<p class="desc">Пусто. Найденное появится здесь. Сюда же можно выложить лишнее из рюкзака — оно останется лежать.</p>');
+  return `<div class="panes place"><div class="pane">${left}</div><div class="pane side">${info}${A.length ? `<div class="acts">${A.join('')}</div>` : ''}${note}${finds}</div></div>`;
 }
 
 /* ---------- экран «Рюкзак» ---------- */
@@ -102,56 +102,79 @@ const CATMAP = { food: ['food', 'drink'], med: ['med'], gear: ['wear'], tool: ['
 function renderInv() {
   const w = weight(), cap = capacity();
   if (pick && ((pick.t === 'inv' && !has(pick.k)) || (pick.t === 'eq' && !g.eq[pick.k]))) pick = null;
-  let h = `<div><div class="hrow"><div class="eyebrow">Груз</div><div class="mono${w > cap ? ' bad' : ''}">${w.toFixed(1)} / ${cap} кг</div></div><div class="hp"><i style="width:${Math.min(100, w / cap * 100)}%;background:${w > cap ? 'var(--blood)' : 'var(--soft)'}"></i></div></div>`;
-  h += `<div><h3>Надето</h3><div class="grid">${SLOTS.map(([s, l]) => { const k = g.eq[s]; return k ? cell(icon(k), ITEMS[k].n, { tag: l, act: 'pickeq', arg: s, on: pick && pick.t === 'eq' && pick.k === s }) : cell('', l, { dim: 1 }); }).join('')}</div></div>`;
-  h += `<div class="chips flat tabsrow">${INVCAT.map(c => `<button class="chip${invCat === c[0] ? ' sel' : ''}" data-act="cat" data-arg="${c[0]}">${c[1]}</button>`).join('')}</div>`;
   const ks = Object.keys(g.inv).filter(k => invCat === 'all' || CATMAP[invCat].includes(ITEMS[k].c));
   ks.sort((a, b) => CATS.findIndex(c => c[0] === ITEMS[a].c) - CATS.findIndex(c => c[0] === ITEMS[b].c));
-  h += ks.length ? `<div class="grid">${ks.map(k => cell(icon(k), ITEMS[k].n, { n: qty(g.inv[k]), act: 'pickinv', arg: k, on: pick && pick.t === 'inv' && pick.k === k })).join('')}</div>` : '<p class="desc">Пусто.</p>';
+  const left = `<div class="invl"><div class="cats">${INVCAT.map(c => `<button class="cat${invCat === c[0] ? ' sel' : ''}" data-act="cat" data-arg="${c[0]}">${c[1]}</button>`).join('')}</div><div class="invg">`
+    + `<div class="hrow"><div class="eyebrow">Груз</div><div class="mono${w > cap ? ' bad' : ''}">${w.toFixed(1)} / ${cap} кг</div></div><div class="hp"><i style="width:${Math.min(100, w / cap * 100)}%;background:${w > cap ? 'var(--blood)' : 'var(--soft)'}"></i></div>`
+    + (ks.length ? `<div class="grid">${ks.map(k => cell(icon(k), ITEMS[k].n, { n: qty(g.inv[k]), act: 'pickinv', arg: k, on: pick && pick.t === 'inv' && pick.k === k })).join('')}</div>` : '<p class="desc">Пусто.</p>') + '</div></div>';
+  const slot = s => { const k = g.eq[s], l = SLOTS.find(x => x[0] === s)[1]; return `<div style="grid-area:${s}">${k ? cell(icon(k), ITEMS[k].n, { act: 'pickeq', arg: s, on: pick && pick.t === 'eq' && pick.k === s }) : cell('', l, { dim: 1 })}</div>`; };
+  let right = `<div class="doll">${['head', 'mask', 'body', 'back', 'armor', 'legs', 'melee', 'feet', 'ranged'].map(slot).join('')}<div class="fig" style="grid-area:fig">${uiIcon('person', '#5d6c77')}<b>уровень ${g.lvl}</b></div></div>`
+    + `<div><div class="hp thin"><i style="width:${g.xp / lvlNeed(g.lvl) * 100}%;background:var(--lamp)"></i></div><div class="ef">Опыт: ${g.xp} из ${lvlNeed(g.lvl)}</div></div>`;
   if (pick) {
     const k = pick.t === 'eq' ? g.eq[pick.k] : pick.k, it = ITEMS[k]; let b = '';
-    if (pick.t === 'eq') b = `<button class="sbtn" data-act="unequip" data-arg="${pick.k}">Снять</button>`;
+    if (pick.t === 'eq') b = `<button class="sbtn hot" data-act="unequip" data-arg="${pick.k}">Снять</button>`;
     else {
       if (it.use) b += `<button class="sbtn hot" data-act="use" data-arg="${k}">${{ food: 'Съесть', drink: 'Выпить' }[it.c] || 'Применить'}</button>`;
       if (it.c === 'melee' || it.c === 'ranged' || it.slot) b += `<button class="sbtn hot" data-act="equip" data-arg="${k}">${it.slot ? 'Надеть' : 'Взять в руки'}</button>`;
       b += `<button class="sbtn" data-act="drop" data-arg="${k}">Выложить</button>` + (g.inv[k] > 1 ? `<button class="sbtn" data-act="dropall" data-arg="${k}">Выложить всё</button>` : '');
     }
-    h += `<div class="detail"><div class="dic">${icon(k)}</div><div class="dtx"><div class="nm">${it.n}${pick.t === 'inv' ? `<span class="q">×${qty(g.inv[k])}</span>` : ''}</div><div class="ef">${itemDesc(k)}</div></div><div class="dbt">${b}</div></div>`;
-  } else h += '<p class="desc">Нажми на вещь, чтобы использовать, надеть или выложить.</p>';
-  return h;
+    right += `<div class="detail"><div class="dic">${icon(k)}</div><div class="dtx"><div class="nm">${it.n}${pick.t === 'inv' ? `<span class="q">×${qty(g.inv[k])}</span>` : ''}</div><div class="ef">${itemDesc(k)}</div></div><div class="dbt">${b}</div></div>`;
+  } else right += '<p class="desc">Нажми на вещь, чтобы использовать, надеть или выложить.</p>';
+  return `<div class="panes"><div class="pane">${left}</div><div class="pane side">${right}</div></div>`;
 }
 
 /* ---------- экран «Лагерь» ---------- */
+const SICON = { fire: ['flame', ['#e08a3c', '#7a3c12', '#f8dc8c']], kitchen: ['pot', DRK], bench: ['wrench', PAL.melee], sew: ['needle', PAL.tool], med: ['medkit', PAL.med], rest: ['tent', PAL.wear] };
+let stn = null, rqty = 1, perkSnooze = 0;
+const recipeIcon = r => r.veh ? svgStr(VICON[r.veh], PAL.part) : icon(Object.keys(r.out)[0]);
 function renderCamp() {
+  if (stn) return renderStation();
   const fire = fireOn();
-  let h = `<div><h3>Стоянка</h3><div class="acts">`
-    + (fire ? btn('stoke', 'Подбросить дров', `горит ещё ${fmtH(g.fire.until - g.time)} · 1 дрова → +2 ч`, !has('wood')) : btn('fire', 'Развести костёр', '2 дрова и спички', !has('wood', 2) || !(has('matches') || owns('lighter'))))
-    + btn('rest', 'Передохнуть', '2 ч, раны заживают быстрее', false, '', 2) + btn('rest', 'Долгий отдых', '8 ч', false, '', 8);
-  if (withVeh()) h += btn('park', 'Оставить транспорт', VEH[g.veh.t].n); else if (g.veh && hyp(g.veh.parked.x - g.pos.x, g.veh.parked.y - g.pos.y) <= 3) h += btn('board', 'Сесть', VEH[g.veh.t].n); else if (g.veh) h += `<div class="btn" aria-disabled="true"><span>${VEH[g.veh.t].n}</span><small>оставлен в ${fmtKm(hyp(g.veh.parked.x - g.pos.x, g.veh.parked.y - g.pos.y))} отсюда</small></div>`;
-  h += '</div></div>';
-  const list = RECIPES.filter(r => !r.wr || wreckHere(r.wr) || r.veh), groups = [...new Set(list.map(r => r.g))];
-  if (!craftG || !groups.includes(craftG)) craftG = groups[0];
-  h += `<div><h3>Мастерить</h3><div class="chips flat tabsrow">${groups.map(x => `<button class="chip${craftG === x ? ' sel' : ''}" data-act="cg" data-arg="${x}">${x}</button>`).join('')}</div></div>`;
-  const rs = list.filter(r => r.g === craftG);
-  if (!rsel || !rs.find(r => r.id === rsel)) rsel = (rs.find(r => !craftMiss(r).length) || rs[0]).id;
-  h += `<div class="grid">${rs.map(r => { const o = r.veh ? uiIcon(VICON[r.veh], '#9fb0bb') : icon(Object.keys(r.out)[0]); return cell(o, r.n, { act: 'rsel', arg: r.id, on: rsel === r.id, dim: craftMiss(r).length > 0 }); }).join('')}</div>`;
-  const r = rs.find(x => x.id === rsel), miss = craftMiss(r), extra = [];
-  for (const t of r.tools || []) extra.push(`<span class="need${owns(t) ? '' : ' miss'}">${ITEMS[t].n}</span>`);
-  if (r.fire) extra.push(`<span class="need${fire ? '' : ' miss'}">костёр</span>`);
-  if (r.snow) extra.push(`<span class="need${snowHere() ? '' : ' miss'}">снег</span>`);
-  if (r.sk) extra.push(`<span class="need${g.sk[r.sk[0]][0] >= r.sk[1] ? '' : ' miss'}">${SKILLS[r.sk[0]]} ${r.sk[1]}</span>`);
-  if (r.wr) extra.push(`<span class="need${wreckHere(r.wr) ? '' : ' miss'}">остов в гаражах</span>`);
-  const out = r.veh ? VEH[r.veh].n : Object.entries(r.out).map(([k, q]) => ITEMS[k].n + (q > 1 ? ' ×' + q : '')).join(', ');
-  h += `<div class="detail col"><div class="nm">${r.n}</div><div class="ef">Получится: ${out}${r.veh ? '' : ' · ' + itemDesc(Object.keys(r.out)[0])}</div>`
-    + (Object.keys(r.need).length ? `<div class="grid small">${Object.keys(r.need).map(k => cell(icon(k), ITEMS[k].n, { n: `${qty(g.inv[k] || 0)}/${r.need[k]}`, bad: !has(k, r.need[k]) })).join('')}</div>` : '')
-    + (extra.length ? `<div class="needs">${extra.join('')}</div>` : '')
-    + btn('craft', 'Создать', fmtH(craftTime(r)), miss.length > 0, 'wide primary', r.id) + '</div>';
-  return h;
+  const tiles = Object.keys(STATIONS).map(k => {
+    const S = STATIONS[k], lv = S.up ? g.st[k] : 0, max = S.up ? S.up.length : 0, can = S.up && lv < max && Object.entries(S.up[lv]).every(([i, q]) => has(i, q)), n = RECIPES.filter(r => r.st[0] === k && !craftMiss(r).length).length;
+    return `<button class="stile" data-act="stn" data-arg="${k}"><span class="sic">${svgStr(SICON[k][0], SICON[k][1])}</span><span class="nm">${S.n}</span><small>${k === 'fire' ? (fire ? 'горит ещё ' + fmtH(g.fire.until - g.time) : 'не горит') : lv ? `уровень ${lv} из ${max}` : 'не построено'}</small>${n ? `<i class="bdg">${n}</i>` : ''}${can ? '<i class="upm">▲ можно улучшить</i>' : ''}</button>`;
+  }).join('');
+  return `<div class="panes one"><div class="pane"><div class="sgrid">${tiles}</div><p class="desc">Стоянка всегда с тобой. Чем выше уровень станка, тем больше на нём рецептов. Цифра на плитке — сколько вещей можно сделать прямо сейчас.</p></div></div>`;
+}
+function renderStation() {
+  const S = STATIONS[stn], lv = S.up ? g.st[stn] : 0, max = S.up ? S.up.length : 0, fire = fireOn();
+  const list = RECIPES.filter(r => r.st[0] === stn);
+  if (!rsel || !list.find(r => r.id === rsel)) { const f0 = list.find(r => !craftMiss(r).length) || list[0]; rsel = f0 ? f0.id : null; rqty = 1; }
+  let left = `<div class="hrow"><button class="sbtn" data-act="stn" data-arg="">← Лагерь</button><div class="eyebrow">${S.n}${max ? ` · уровень ${lv} из ${max}` : ''}</div></div>`;
+  for (let L = 0; L <= max; L++) { const rs = list.filter(r => r.st[1] === L); if (!rs.length) continue; left += `<div><h3 class="lv${L > lv ? ' lock' : ''}">${L === 0 ? 'Доступно сразу' : 'Уровень ' + L}${L > lv ? ' — нужно улучшение' : ''}</h3><div class="grid">${rs.map(r => cell(recipeIcon(r), r.n, { act: 'rsel', arg: r.id, on: rsel === r.id, dim: craftMiss(r).length > 0 })).join('')}</div></div>`; }
+  if (!list.length) left += '<p class="desc">Здесь ничего не мастерят.</p>';
+  let right = `<p class="desc">${S.d}</p>`;
+  if (stn === 'fire') right += `<div class="acts">${fire ? btn('stoke', 'Подбросить дров', `горит ещё ${fmtH(g.fire.until - g.time)} · 1 дрова → +2 ч`, !has('wood'), 'wide') : btn('fire', 'Развести костёр', '2 дрова и спички', !has('wood', 2) || !(has('matches') || owns('lighter')), 'wide primary')}</div>`;
+  if (stn === 'rest') right += `<div class="acts">${btn('rest', 'Передохнуть', '2 ч', false, '', 2)}${btn('rest', 'Долгий отдых', '8 ч', false, '', 8)}</div>`;
+  if (S.up && lv < max) { const cost = S.up[lv], ok = Object.entries(cost).every(([i, q]) => has(i, q)); right += `<div class="detail col"><div class="nm">${lv ? 'Улучшение' : 'Постройка'}: уровень ${lv + 1}</div><div class="grid small">${Object.keys(cost).map(k => cell(icon(k), ITEMS[k].n, { n: `${qty(g.inv[k] || 0)}/${cost[k]}`, bad: !has(k, cost[k]) })).join('')}</div>${btn('upg', lv ? 'Улучшить' : 'Построить', '1 ч', !ok, 'wide', stn)}</div>`; }
+  const r = list.find(x => x.id === rsel);
+  if (r) {
+    const miss = craftMiss(r), extra = [];
+    for (const t of r.tools || []) extra.push(`<span class="${owns(t) ? '' : 'miss'}">${ITEMS[t].n}</span>`);
+    if (r.fire) extra.push(`<span class="${fire ? '' : 'miss'}">костёр</span>`);
+    if (r.snow) extra.push(`<span class="${snowHere() ? '' : 'miss'}">снег</span>`);
+    if (r.sk) extra.push(`<span class="${g.sk[r.sk[0]][0] >= r.sk[1] ? '' : 'miss'}">${SKILLS[r.sk[0]]} ${r.sk[1]}</span>`);
+    if (r.wr) extra.push(`<span class="${wreckHere(r.wr) ? '' : 'miss'}">остов в гаражах</span>`);
+    if (r.st[1] > lv) extra.push(`<span class="miss">${S.n}, ур. ${r.st[1]}</span>`);
+    const nk = Object.keys(r.need), maxN = r.veh ? 1 : clamp(nk.length ? Math.min(...nk.map(k => Math.floor((g.inv[k] || 0) / r.need[k]))) : 5, 1, 20); rqty = clamp(rqty, 1, maxN);
+    const out = r.veh ? VEH[r.veh].n : Object.entries(r.out).map(([k, q]) => ITEMS[k].n + (q * rqty > 1 ? ' ×' + q * rqty : '')).join(', ');
+    right += `<div class="detail col"><div class="irow"><span class="mic">${recipeIcon(r)}</span><div><div class="nm">${r.n}</div><div class="ef">Получится: ${out}${r.veh ? '' : ' · ' + itemDesc(Object.keys(r.out)[0])}</div></div></div>`
+      + (nk.length ? `<div class="grid small">${nk.map(k => cell(icon(k), ITEMS[k].n, { n: `${qty(g.inv[k] || 0)}/${r.need[k] * rqty}`, bad: !has(k, r.need[k] * rqty) })).join('')}</div>` : '')
+      + (extra.length ? `<div class="needs">${extra.join('')}</div>` : '')
+      + `<div class="qrow">${r.veh ? '' : `<button class="sbtn" data-act="q-"${rqty <= 1 ? ' disabled' : ''}>−</button><b>${rqty}</b><button class="sbtn" data-act="q+"${rqty >= maxN ? ' disabled' : ''}>+</button>`}${btn('craft', 'Создать', fmtH(craftTime(r) * rqty), miss.length > 0, 'primary grow', r.id)}</div></div>`;
+  }
+  return `<div class="panes"><div class="pane">${left}</div><div class="pane side">${right}</div></div>`;
+}
+function showPerk() {
+  const o = perkOffer(); $('#modal').dataset.kind = 'perk';
+  showModal(`<div class="card wide"><div class="eyebrow">Уровень ${g.lvl}</div><h3 class="big">Новая способность</h3><div class="perks">${o.map(id => `<button class="perk" data-act="perk" data-arg="${id}"><span class="pm">${svgStr('star', ['#e8a03a', '#7a4a1e', '#f8dc8c'])}</span><b>${PERKS[id].n}${pk(id) ? ' ' + (pk(id) + 1) : ''}</b><small>${PERKS[id].d}</small></button>`).join('')}</div><button class="btn row" data-act="perklater">Отложить</button></div>`);
 }
 
 /* ---------- экраны «Герой» и «Мир» ---------- */
 function renderChar() {
-  const s = g.s; let h = '<div><h3>Раны</h3>';
+  const s = g.s, pl = Object.keys(g.perks);
+  let h = `<div><h3>Уровень ${g.lvl}</h3><div class="hp thin"><i style="width:${g.xp / lvlNeed(g.lvl) * 100}%;background:var(--lamp)"></i></div><div class="ef">Опыт: ${g.xp} из ${lvlNeed(g.lvl)}</div>${g.perkPts > 0 ? btn('perkopen', 'Выбрать способность', 'доступно: ' + g.perkPts, false, 'wide primary') : ''}${pl.length ? '<div class="items">' + pl.map(k => `<div class="item"><div><div class="nm">${PERKS[k].n}<span class="q">ур. ${g.perks[k]}</span></div><div class="ef">${PERKS[k].d}</div></div></div>`).join('') + '</div>' : '<p class="desc">Способностей пока нет. Они даются за новые уровни.</p>'}</div>`;
+  h += '<div><h3>Раны</h3>';
   if (!g.wounds.length) h += '<p class="desc">Ран нет.</p>';
   else h += '<div class="items">' + g.wounds.map((w, i) => {
     const d = WOUNDS[w.t], st = []; let b = '';
@@ -180,12 +203,17 @@ function renderWorld() {
 const TITLES = { place: 'Место', inv: 'Рюкзак', camp: 'Лагерь', char: 'Герой', world: 'Мир' };
 function renderSheet(keep) {
   const sh = $('#sheet'); if (scr === 'map') { sh.hidden = true; sh.innerHTML = ''; return; }
-  const old = keep && $('#sb') ? $('#sb').scrollTop : 0;
+  const old = keep ? [...sh.querySelectorAll('#sb, .pane')].map(e => e.scrollTop) : [];
+  const body = scr === 'place' ? renderPlace() : scr === 'inv' ? renderInv() : scr === 'camp' ? renderCamp() : `<div class="panes one"><div class="pane">${scr === 'char' ? renderChar() : renderWorld()}</div></div>`;
   sh.hidden = false;
-  sh.innerHTML = `<div class="shead"><span>${TITLES[scr]}</span><button class="xbtn" data-act="scr" data-arg="map" aria-label="Закрыть">✕</button></div><div id="sb">${scr === 'place' ? renderPlace() : scr === 'inv' ? renderInv() : scr === 'camp' ? renderCamp() : scr === 'char' ? renderChar() : renderWorld()}</div>`;
-  $('#sb').scrollTop = old;
+  sh.innerHTML = `<div class="shead"><span>${TITLES[scr]}</span><button class="xbtn" data-act="scr" data-arg="map" aria-label="Закрыть">✕</button></div><div id="sb">${body}</div>`;
+  if (keep) [...sh.querySelectorAll('#sb, .pane')].forEach((e, i) => { if (old[i]) e.scrollTop = old[i]; });
 }
-function render() { renderHud(); renderNav(); renderRoute(); renderSheet(true); if (g.combat) renderCombat(); else if (modalOpen() && $('#modal').dataset.kind === 'trade') renderTrade(); }
+function render() {
+  renderHud(); renderNav(); renderRoute(); renderSheet(true);
+  if (g.combat) renderCombat(); else if (modalOpen() && $('#modal').dataset.kind === 'trade') renderTrade();
+  else if (g.perkPts > 0 && !trip && !g.over && !modalOpen() && perkSnooze !== g.lvl) showPerk();
+}
 
 /* ---------- бой, торговля, конец ---------- */
 function renderCombat() {
@@ -223,8 +251,8 @@ function renderTrade() {
 function showOver() { const o = g.over; $('#modal').dataset.kind = 'over'; showModal(`<div class="card"><div class="eyebrow">Конец пути</div><h3 class="big">Ты не выжил</h3><p class="desc">${esc(o.reason)}.</p><div class="kv"><span>Дней</span><b class="mono">${dayNum()}</b><span>Пройдено</span><b class="mono">${fmtKm(g.stats.km)}</b><span>Побед</span><b class="mono">${g.stats.kills}</b></div><button class="btn row primary" data-act="newyes">Начать заново</button></div>`); }
 
 /* ---------- действия ---------- */
-function fresh() { hideModal(); newGame(); sel = null; pick = null; scr = 'place'; confirmNew = false; cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; cam.follow = true; save(); render(); }
-const FREE = { scr: 1, cat: 1, cg: 1, rsel: 1, pickinv: 1, pickeq: 1, use: 1, equip: 1, unequip: 1, togf: 1, newgame: 1, newno: 1 };
+function fresh() { hideModal(); newGame(); sel = null; pick = null; stn = null; perkSnooze = 0; scr = 'map'; confirmNew = false; cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; cam.follow = true; save(); render(); }
+const FREE = { scr: 1, cat: 1, stn: 1, rsel: 1, 'q-': 1, 'q+': 1, pickinv: 1, pickeq: 1, use: 1, equip: 1, unequip: 1, togf: 1, newgame: 1, newno: 1 };
 function act(a, arg) {
   if (a === 'zin' || a === 'zout') { cam.z = clamp(cam.z * (a === 'zin' ? 1.6 : 1 / 1.6), zMin(), ZMAX); return; }
   if (a === 'center') { cam.follow = true; return; }
@@ -234,10 +262,12 @@ function act(a, arg) {
   if (a === 'closemodal') { hideModal(); return render(); }
   if (a === 'ttab') { tradeTab = arg; return renderTrade(); }
   if (a === 'buy') return actBuy(arg); if (a === 'sell') return actSell(arg);
+  if (a === 'perk') { hideModal(); return actPerk(arg); }
+  if (a === 'perklater') { perkSnooze = g.lvl; return hideModal(); }
   if (g.over || g.combat || modalOpen()) return;
   if (trip && !FREE[a]) return toast('Сначала остановись.', '');
   switch (a) {
-    case 'scr': scr = scr === arg ? 'map' : arg; pick = null; confirmNew = false; renderNav(); renderRoute(); renderSheet(false); break;
+    case 'scr': scr = scr === arg ? 'map' : arg; pick = null; stn = null; confirmNew = false; renderNav(); renderRoute(); renderSheet(false); break;
     case 'go': if (sel && startTrip(sel.x, sel.y)) { cam.follow = true; scr = 'map'; renderNav(); renderSheet(false); renderRoute(); } break;
     case 'unsel': sel = null; renderRoute(); break;
     case 'fire': actFire(); break; case 'stoke': actStoke(); break; case 'rest': actRest(+arg); break;
@@ -249,9 +279,11 @@ function act(a, arg) {
     case 'pickeq': pick = pick && pick.t === 'eq' && pick.k === arg ? null : { t: 'eq', k: arg }; renderSheet(true); break;
     case 'use': actUse(arg); break; case 'equip': actEquip(arg); break; case 'unequip': actUnequip(arg); break;
     case 'drop': actDrop(arg, false); break; case 'dropall': actDrop(arg, true); break;
-    case 'cat': invCat = arg; pick = null; renderSheet(true); break; case 'cg': craftG = arg; rsel = null; renderSheet(true); break; case 'rsel': rsel = arg; renderSheet(true); break;
+    case 'cat': invCat = arg; pick = null; renderSheet(true); break; case 'stn': stn = arg || null; rsel = null; rqty = 1; renderSheet(false); break; case 'rsel': rsel = arg; rqty = 1; renderSheet(true); break;
+    case 'q-': rqty--; renderSheet(true); break; case 'q+': rqty++; renderSheet(true); break;
+    case 'upg': actUpgrade(arg); break; case 'perkopen': showPerk(); break;
     case 'treat': { const p = arg.split(':'); actTreat(+p[0], p[1]); break; }
-    case 'craft': actCraft(arg); break;
+    case 'craft': actCraft(arg, rqty); rqty = 1; break;
     case 'togf': showF = !showF; renderSheet(true); break;
     case 'newgame': confirmNew = true; renderSheet(true); break; case 'newno': confirmNew = false; renderSheet(true); break;
   }
@@ -274,7 +306,7 @@ function buildTerrain() {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, col = bi[i], edge = (x + 1 < w && lv[i + 1] !== lv[i]) || (y + 1 < h && lv[i + w] !== lv[i]), k = (.95 + lv[i] * .012) * (edge ? .965 : 1); d[i * 4] = col[0] * k; d[i * 4 + 1] = col[1] * k; d[i * 4 + 2] = col[2] * k; d[i * 4 + 3] = 255; }
   c.putImageData(img, 0, 0);
 }
-function viewCenter() { let x = cw / 2, y = ch / 2; const sh = $('#sheet'); if (!sh.hidden) { const r = sh.getBoundingClientRect(), m = cv.getBoundingClientRect(); if (r.width > m.width * .9) y = Math.max(40, (r.top - m.top) / 2); else x = Math.max(40, (r.left - m.left) / 2); } return [x, y]; }
+function viewCenter() { return [cw / 2, ch / 2]; }
 const S2 = (x, y) => [(x - cam.x) * cam.z + vcx, (y - cam.y) * cam.z + vcy];
 function path(p, close) { cx.beginPath(); for (let i = 0; i < p.length; i++) { const sx = (p[i][0] - cam.x) * cam.z + vcx, sy = (p[i][1] - cam.y) * cam.z + vcy; if (i) cx.lineTo(sx, sy); else cx.moveTo(sx, sy); } if (close) cx.closePath(); }
 function label(t, x, y, col, font, align) { cx.font = font || '600 11px "Golos Text", system-ui, sans-serif'; cx.textAlign = align || 'center'; cx.textBaseline = 'top'; cx.lineWidth = 3; cx.lineJoin = 'round'; cx.strokeStyle = 'rgba(244,238,220,.9)'; cx.strokeText(t, x, y); cx.fillStyle = col || INK; cx.fillText(t, x, y); }
@@ -378,11 +410,11 @@ function frame(now) {
   draw();
 }
 function boot(data) {
-  g = (data && data.g && data.g.v === 2 ? data.g : null) || load() || newGame();
+  g = (data && data.g && data.g.v === 3 ? data.g : null) || load() || newGame();
   g.combat = null; trip = null; locate(); discover();
   resize(); new ResizeObserver(resize).observe(cv);
   buildTerrain(); cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; vcx = cw / 2; vcy = ch / 2;
-  scr = 'place'; render(); if (g.over) showOver();
+  scr = 'map'; render(); if (g.over) showOver();
   requestAnimationFrame(frame);
 }
 try { window.claude && window.claude.hot && window.claude.hot.snapshot && window.claude.hot.snapshot(() => ({ g })); } catch (e) { /* вне просмотрщика */ }
