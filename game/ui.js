@@ -295,99 +295,111 @@ UIH.tripEnd = arrived => { if (sel && hyp(sel.x - g.pos.x, sel.y - g.pos.y) < .3
 
 /* ---------- карта ---------- */
 const cv = $('#map'), cx = cv.getContext('2d'), cam = { x: 0, y: 0, z: 8, follow: true }, ZMAX = 30;
-let cw = 0, ch = 0, dpr = 1, terrain = null, vcx = 0, vcy = 0;
-const INK = '#3a332a', PAPER = '#f4eedc', REDP = '#cf4428', SEA = '#a9c3d2', INKP = ['#3a332a', '#8a7f6d', '#f4eedc'];
+let cw = 0, ch = 0, dpr = 1, terrain = null, detail = null, vcx = 0, vcy = 0;
+const INK = '#3a332a', PAPER = '#f4eedc', REDP = '#cf4428', SEA = '#587c91', INKP = ['#3a332a', '#8a7f6d', '#f4eedc'];
 const zMin = () => Math.max(.03, cw / W * .95);
 function resize() { const r = cv.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1); cw = r.width; ch = r.height; cv.width = Math.max(1, Math.round(cw * dpr)); cv.height = Math.max(1, Math.round(ch * dpr)); }
 function buildTerrain() {
-  const S = 12, w = Math.ceil(W / S), h = Math.ceil(H / S); terrain = document.createElement('canvas'); terrain.width = w; terrain.height = h;
-  const c = terrain.getContext('2d'), img = c.createImageData(w, h), d = img.data, COL = { tundra: [214, 217, 210], taiga: [178, 194, 164], forest: [194, 206, 166], steppe: [222, 210, 166], desert: [230, 212, 172] };
-  const lv = new Uint8Array(w * h), bi = [];
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const ll = unproj(x * S, y * S), n = fbm(x / 13, y / 13); lv[y * w + x] = Math.floor(n * 9); bi.push(COL[biome(ll[0], ll[1])]); }
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, col = bi[i], edge = (x + 1 < w && lv[i + 1] !== lv[i]) || (y + 1 < h && lv[i + w] !== lv[i]), k = (.95 + lv[i] * .012) * (edge ? .965 : 1); d[i * 4] = col[0] * k; d[i * 4 + 1] = col[1] * k; d[i * 4 + 2] = col[2] * k; d[i * 4 + 3] = 255; }
+  const S = 10, w = Math.ceil(W / S), h = Math.ceil(H / S); terrain = document.createElement('canvas'); terrain.width = w; terrain.height = h;
+  const c = terrain.getContext('2d'), img = c.createImageData(w, h), d = img.data, COL = { tundra: [152, 160, 146], taiga: [92, 118, 90], forest: [120, 142, 94], steppe: [172, 160, 104], desert: [198, 176, 124] };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const ll = unproj(x * S, y * S), col = COL[biome(ll[0], ll[1])], k = .8 + fbm(x / 22, y / 22) * .28 + fbm(x / 5, y / 5) * .14, i = (y * w + x) * 4; d[i] = col[0] * k; d[i + 1] = col[1] * k; d[i + 2] = col[2] * k; d[i + 3] = 255; }
   c.putImageData(img, 0, 0);
+  const P = 128, dc = document.createElement('canvas'); dc.width = dc.height = P; const dx = dc.getContext('2d'), im2 = dx.createImageData(P, P), e = im2.data;
+  const pn = (u, v, per) => { const xi = Math.floor(u), yi = Math.floor(v), xf = u - xi, yf = v - yi, s = t => t * t * (3 - 2 * t), hh = (a, b) => D.hash2(((a % per) + per) % per, ((b % per) + per) % per + 77), a = hh(xi, yi), b = hh(xi + 1, yi), cc = hh(xi, yi + 1), dd = hh(xi + 1, yi + 1), uu = s(xf), vv = s(yf); return a + (b - a) * uu + (cc - a) * vv + (a - b - cc + dd) * uu * vv; };
+  for (let y = 0; y < P; y++) for (let x = 0; x < P; x++) { const n = pn(x / 16, y / 16, 8) * .5 + pn(x / 6.4, y / 6.4, 20) * .3 + pn(x / 2.56, y / 2.56, 50) * .2, i = (y * P + x) * 4, v = n > .5 ? 255 : 0; e[i] = e[i + 1] = e[i + 2] = v; e[i + 3] = Math.min(60, Math.abs(n - .5) * 2 * 110); }
+  dx.putImageData(im2, 0, 0); detail = cx.createPattern(dc, 'repeat');
 }
 function viewCenter() { return [cw / 2, ch / 2]; }
 const S2 = (x, y) => [(x - cam.x) * cam.z + vcx, (y - cam.y) * cam.z + vcy];
 function path(p, close) { cx.beginPath(); for (let i = 0; i < p.length; i++) { const sx = (p[i][0] - cam.x) * cam.z + vcx, sy = (p[i][1] - cam.y) * cam.z + vcy; if (i) cx.lineTo(sx, sy); else cx.moveTo(sx, sy); } if (close) cx.closePath(); }
 function label(t, x, y, col, font, align) { cx.font = font || '600 11px "Golos Text", system-ui, sans-serif'; cx.textAlign = align || 'center'; cx.textBaseline = 'top'; cx.lineWidth = 3; cx.lineJoin = 'round'; cx.strokeStyle = 'rgba(244,238,220,.9)'; cx.strokeText(t, x, y); cx.fillStyle = col || INK; cx.fillText(t, x, y); }
 function box(sx, sy, s, fill, stroke, lw) { const r = s / 2; cx.beginPath(); cx.moveTo(sx - r + 3, sy - r); cx.arcTo(sx + r, sy - r, sx + r, sy + r, 3); cx.arcTo(sx + r, sy + r, sx - r, sy + r, 3); cx.arcTo(sx - r, sy + r, sx - r, sy - r, 3); cx.arcTo(sx - r, sy - r, sx + r, sy - r, 3); cx.closePath(); cx.fillStyle = fill; cx.fill(); cx.lineWidth = lw || 1.3; cx.strokeStyle = stroke; cx.stroke(); }
-function drawSite(s, sx, sy, big) {
+function drawSite(s, sx, sy, sz) {
   const st = g.sites[s.id], empty = st && st.s <= 0 && s.t !== 'base', cur = curHere.site === s, isSel = sel && sel.id === s.id;
-  if (ART['b:' + s.t]) {
-    const sz = big ? 46 : 30; cx.fillStyle = 'rgba(58,51,42,.22)'; cx.beginPath(); cx.ellipse(sx, sy + sz * .32, sz * .42, sz * .14, 0, 0, 7); cx.fill();
-    cx.globalAlpha = empty ? .45 : 1; const ok = drawArt(cx, 'b:' + s.t, sx, sy, sz); cx.globalAlpha = 1;
-    if (ok) { if (s.t === 'base') { cx.beginPath(); cx.arc(sx, sy, sz * .62, 0, 7); cx.strokeStyle = FACTIONS[CITY[s.city].f].c; cx.lineWidth = 2.2; cx.stroke(); } if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, sz * .7, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); } return sz; }
+  const key = s.t === 'house' && ART['h:' + s.v] ? 'h:' + s.v : 'b:' + s.t;
+  if (ART[key]) {
+    cx.fillStyle = 'rgba(40,36,30,.25)'; cx.beginPath(); cx.ellipse(sx, sy + sz * .3, sz * .4, sz * .13, 0, 0, 7); cx.fill();
+    cx.globalAlpha = empty ? .42 : 1; const ok = drawArt(cx, key, sx, sy, sz); cx.globalAlpha = 1;
+    if (ok) { if (s.t === 'base') { cx.beginPath(); cx.arc(sx, sy, sz * .6, 0, 7); cx.strokeStyle = FACTIONS[CITY[s.city].f].c; cx.lineWidth = 2.4; cx.stroke(); } if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, sz * .68, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2.2; cx.stroke(); } return; }
   }
-  const sz = big ? 20 : 15;
-  box(sx, sy, sz, empty ? '#d9d1bc' : PAPER, s.t === 'base' ? FACTIONS[CITY[s.city].f].c : INK, s.t === 'base' ? 2.2 : 1.3);
-  const im = glyphImg(BICON[s.t], INKP); if (im.complete && im.naturalWidth) { cx.globalAlpha = empty ? .35 : 1; cx.drawImage(im, sx - sz * .34, sy - sz * .34, sz * .68, sz * .68); cx.globalAlpha = 1; }
-  if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, sz * .9, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); }
-  return sz;
+  const b = Math.min(sz, 20); box(sx, sy, b, empty ? '#d9d1bc' : PAPER, s.t === 'base' ? FACTIONS[CITY[s.city].f].c : INK, s.t === 'base' ? 2.2 : 1.3);
+  const im = glyphImg(BICON[s.t], INKP); if (im.complete && im.naturalWidth) { cx.globalAlpha = empty ? .35 : 1; cx.drawImage(im, sx - b * .34, sy - b * .34, b * .68, b * .68); cx.globalAlpha = 1; }
+  if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, b * .9, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); }
 }
+const siteSize = (c, z) => clamp(c.grid.step * z * .84, 22, 78);
+const TDENS = { forest: .15, taiga: .12, steppe: .55, tundra: .5, desert: .6 }, TSIZE = { forest: 46, taiga: 46, steppe: 34, tundra: 36, desert: 40 };
 function draw() {
   const z = cam.z;
   cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.fillStyle = SEA; cx.fillRect(0, 0, cw, ch);
   const o = S2(0, 0); cx.imageSmoothingEnabled = true; cx.drawImage(terrain, o[0], o[1], W * z, H * z);
-  cx.fillStyle = SEA; cx.strokeStyle = '#6f93aa'; cx.lineWidth = 1.2; cx.lineJoin = 'round';
+  if (detail) { cx.save(); cx.translate(-((cam.x * z) % 128), -((cam.y * z) % 128)); cx.fillStyle = detail; cx.fillRect(-128, -128, cw + 384, ch + 384); cx.restore(); }
+  cx.lineJoin = 'round'; cx.lineCap = 'round';
+  cx.fillStyle = SEA; cx.strokeStyle = '#2f4a5a'; cx.lineWidth = 1.5;
   for (const p of SEAS) { path(p, true); cx.fill(); cx.stroke(); }
-  cx.fillStyle = '#d6d9d2'; for (const p of ISLES) { path(p, true); cx.fill(); cx.stroke(); }
+  cx.fillStyle = '#9aa091'; for (const p of ISLES) { path(p, true); cx.fill(); cx.stroke(); }
   cx.fillStyle = SEA; for (const p of LAKES) { path(p, true); cx.fill(); cx.stroke(); }
-  cx.strokeStyle = '#7fa3bb'; cx.lineWidth = clamp(z * 2.5, 1, 7); for (const r of RIVERS) { path(r, false); cx.stroke(); }
-  const vis = CITIES.filter(c => { const p = S2(c.x, c.y), r = c.r * z; return p[0] + r > -80 && p[1] + r > -30 && p[0] - r < cw + 80 && p[1] - r < ch + 30; });
-  // штриховка местности
-  if (z > .8) {
-    const sp = Math.max(1.5, 30 / z), x0 = Math.floor((cam.x - vcx / z) / sp), x1 = Math.ceil((cam.x + (cw - vcx) / z) / sp), y0 = Math.floor((cam.y - vcy / z) / sp), y1 = Math.ceil((cam.y + (ch - vcy) / z) / sp);
-    cx.lineWidth = 1.1; cx.strokeStyle = 'rgba(70,92,60,.5)'; cx.fillStyle = 'rgba(110,100,70,.45)';
+  const rw = clamp(z * 3, 1.5, 9);
+  cx.strokeStyle = '#2f4a5a'; cx.lineWidth = rw + 2; for (const r of RIVERS) { path(r, false); cx.stroke(); }
+  cx.strokeStyle = '#6a93aa'; cx.lineWidth = rw; for (const r of RIVERS) { path(r, false); cx.stroke(); }
+  const vis = CITIES.filter(c => { const p = S2(c.x, c.y), r = c.r * z; return p[0] + r > -90 && p[1] + r > -40 && p[0] - r < cw + 90 && p[1] - r < ch + 40; });
+  // растительность и рельеф: рисованные островки по сетке
+  {
+    const sp = Math.max(1.4, 44 / z), x0 = Math.floor((cam.x - vcx / z) / sp) - 1, x1 = Math.ceil((cam.x + (cw - vcx) / z) / sp) + 1, y0 = Math.floor((cam.y - vcy / z) / sp) - 1, y1 = Math.ceil((cam.y + (ch - vcy) / z) / sp) + 1, lod = Math.round(Math.log2(sp) * 2);
     for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) {
-      const hx = D.hash2(gx * 7 + 1, gy * 13 + 5), hy = D.hash2(gx * 11 + 3, gy * 5 + 9); if (hx < .25) continue;
-      const wx = (gx + hx) * sp, wy = (gy + hy) * sp; if (isWater(wx, wy) || vis.some(c => hyp(c.x - wx, c.y - wy) < c.r)) continue;
-      const ll = unproj(wx, wy), b = biome(ll[0], ll[1]), sx = (wx - cam.x) * z + vcx, sy = (wy - cam.y) * z + vcy;
-      if (b === 'forest' || b === 'taiga') { cx.beginPath(); cx.moveTo(sx - 4, sy + 4); cx.lineTo(sx, sy - 5); cx.lineTo(sx + 4, sy + 4); if (b === 'taiga') { cx.moveTo(sx - 3, sy); cx.lineTo(sx + 3, sy); } cx.stroke(); }
-      else if (b === 'steppe') { cx.fillRect(sx - 3, sy, 6, 1.2); } else if (b === 'tundra') { cx.fillRect(sx - 1, sy - 1, 2, 2); cx.fillRect(sx + 3, sy + 2, 2, 2); } else { cx.beginPath(); cx.arc(sx, sy, 3, Math.PI, 0); cx.strokeStyle = 'rgba(140,110,60,.45)'; cx.stroke(); cx.strokeStyle = 'rgba(70,92,60,.5)'; }
+      const hx = D.hash2(gx * 7 + lod * 31, gy * 13 + 5), hy = D.hash2(gx * 11 + 3, gy * 5 + lod * 17), wx = (gx + hx) * sp, wy = (gy + hy) * sp;
+      if (wx < 0 || wy < 0 || wx > W || wy > H || isWater(wx, wy) || vis.some(c => hyp(c.x - wx, c.y - wy) < c.r + sp * .3)) continue;
+      const ll = unproj(wx, wy), b = biome(ll[0], ll[1]); if (D.hash2(gx * 3 + 9, gy * 17 + lod) < TDENS[b]) continue;
+      drawArt(cx, 't:' + b, (wx - cam.x) * z + vcx, (wy - cam.y) * z + vcy, TSIZE[b] * (.8 + hx * .4));
     }
   }
+  // дороги между городами
+  const dw = clamp(z * 2.2, 1.4, 8);
+  cx.strokeStyle = 'rgba(58,48,36,.75)'; cx.lineWidth = dw + 1.6; cx.beginPath(); for (const r of D.ROADS) { const a = S2(r[0].x, r[0].y), b = S2(r[1].x, r[1].y); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); } cx.stroke();
+  cx.strokeStyle = '#b9a67c'; cx.lineWidth = dw; cx.stroke();
   // заражение
-  for (const q of ZONES) { const [sx, sy] = S2(q.x, q.y), r = q.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; const gr = cx.createRadialGradient(sx, sy, 0, sx, sy, r); gr.addColorStop(0, `rgba(200,130,30,${.14 + q.lvl * .06})`); gr.addColorStop(1, 'rgba(200,130,30,.05)'); cx.fillStyle = gr; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fill(); cx.setLineDash([5, 5]); cx.strokeStyle = 'rgba(170,96,20,.75)'; cx.lineWidth = 1.3; cx.stroke(); cx.setLineDash([]); }
+  for (const q of ZONES) { const [sx, sy] = S2(q.x, q.y), r = q.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; const gr = cx.createRadialGradient(sx, sy, 0, sx, sy, r); gr.addColorStop(0, `rgba(214,190,40,${.16 + q.lvl * .07})`); gr.addColorStop(1, 'rgba(214,190,40,.05)'); cx.fillStyle = gr; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fill(); cx.setLineDash([5, 5]); cx.strokeStyle = 'rgba(232,206,60,.85)'; cx.lineWidth = 1.5; cx.stroke(); cx.setLineDash([]); }
   // территории
-  if (showF) for (const b of D.BASES) { const [sx, sy] = S2(b.x, b.y), r = b.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.setLineDash([2, 6]); cx.strokeStyle = FACTIONS[b.f].c; cx.globalAlpha = .9; cx.lineWidth = 1.6; cx.stroke(); cx.globalAlpha = .07; cx.fillStyle = FACTIONS[b.f].c; cx.fill(); cx.globalAlpha = 1; cx.setLineDash([]); }
+  if (showF) for (const b of D.BASES) { const [sx, sy] = S2(b.x, b.y), r = b.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.setLineDash([2, 6]); cx.strokeStyle = FACTIONS[b.f].c; cx.globalAlpha = .95; cx.lineWidth = 1.8; cx.stroke(); cx.globalAlpha = .06; cx.fillStyle = FACTIONS[b.f].c; cx.fill(); cx.globalAlpha = 1; cx.setLineDash([]); }
   // города
   for (const c of vis) {
-    const [sx, sy] = S2(c.x, c.y), r = c.r * z;
+    const [sx, sy] = S2(c.x, c.y), r = c.r * z, G = c.grid;
     if (r > 44) {
-      cx.save(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fillStyle = 'rgba(244,238,220,.6)'; cx.fill(); cx.clip();
-      const rr = mulberry32(hashStr('st' + c.n)); cx.strokeStyle = 'rgba(58,51,42,.22)'; cx.lineWidth = clamp(z * .35, 1.5, 8);
-      for (let i = 0; i < 4 + c.size * 2; i++) { const a = (i % 2 ? Math.PI / 2 : 0) + (rr() - .5) * .5, off = (rr() - .5) * 1.7 * r, nx = Math.cos(a + Math.PI / 2) * off, ny = Math.sin(a + Math.PI / 2) * off; cx.beginPath(); cx.moveTo(sx + nx - Math.cos(a) * r * 1.2, sy + ny - Math.sin(a) * r * 1.2); cx.lineTo(sx + nx + Math.cos(a) * r * 1.2, sy + ny + Math.sin(a) * r * 1.2); cx.stroke(); }
-      cx.restore(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 2; cx.strokeStyle = c.f ? FACTIONS[c.f].c : INK; cx.stroke();
-      for (const s of c.sites) { const p = S2(s.x, s.y); if (p[0] < -20 || p[1] < -20 || p[0] > cw + 20 || p[1] > ch + 20) continue; const dz = drawSite(s, p[0], p[1], z > 6); if (z > 9) label(s.n, p[0], p[1] + dz * .55 + 2, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); }
-      label(c.n, sx, sy - r - 18, INK, '600 13px "Unbounded", "Golos Text", sans-serif');
+      cx.save(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fillStyle = '#a8a08c'; cx.fill(); cx.clip();
+      const cs = Math.cos(G.rot), sn = Math.sin(G.rot), m = Math.ceil(G.R / G.step), wst = clamp(G.step * z * .14, 2, 14);
+      const streets = (col, add, dash) => { cx.strokeStyle = col; cx.setLineDash(dash || []); for (let pass = 0; pass < 2; pass++) for (let i = -m; i <= m; i++) { const d = i * G.step; if (Math.abs(d) >= c.r) continue; const hl = Math.sqrt(c.r * c.r - d * d), ax = pass ? d : -hl, ay = pass ? -hl : d, bx = pass ? d : hl, by = pass ? hl : d; cx.lineWidth = (i === 0 ? wst * 1.5 : wst) + add; cx.beginPath(); cx.moveTo(sx + (ax * cs - ay * sn) * z, sy + (ax * sn + ay * cs) * z); cx.lineTo(sx + (bx * cs - by * sn) * z, sy + (bx * sn + by * cs) * z); cx.stroke(); } cx.setLineDash([]); };
+      streets('#4c4840', 2.4); streets('#77736a', 0); if (wst > 5) streets('rgba(226,220,200,.55)', -wst + 1.2, [8, 10]);
+      cx.restore();
+      cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 3; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#2a251e'; cx.stroke();
+      const sz = siteSize(c, z);
+      for (const s of c.sites) { const p = S2(s.x, s.y); if (p[0] < -50 || p[1] < -50 || p[0] > cw + 50 || p[1] > ch + 50) continue; drawSite(s, p[0], p[1], sz); if (sz > 54 || curHere.site === s || (sel && sel.id === s.id)) label(s.n, p[0], p[1] + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); }
+      label(c.n, sx, Math.max(6, sy - r - 20), INK, '600 14px "Unbounded", "Golos Text", sans-serif');
     } else {
-      const rp = Math.max(c.size + 2, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = 'rgba(244,238,220,.7)'; cx.fill(); cx.lineWidth = c.size === 3 ? 2.2 : 1.5; cx.strokeStyle = c.f ? FACTIONS[c.f].c : INK; cx.stroke();
-      if (rp > 5) { cx.beginPath(); cx.arc(sx, sy, Math.min(3, rp * .3), 0, 7); cx.fillStyle = INK; cx.fill(); }
-      if (c.size === 3 || z > .22 || (c.size === 2 && z > .1)) label(c.n, sx, sy + rp + 3, INK, c.size === 3 ? '600 12px "Golos Text", system-ui, sans-serif' : null);
+      const rp = Math.max(c.size * 1.5 + 3, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#cfc6ae'; cx.fill(); cx.lineWidth = c.size === 3 ? 2.6 : 1.8; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#2a251e'; cx.stroke();
+      if (rp > 9) drawArt(cx, 'h:' + (hashStr(c.n) & 3), sx, sy, rp * 1.7); else { cx.beginPath(); cx.arc(sx, sy, Math.min(2.5, rp * .4), 0, 7); cx.fillStyle = '#2a251e'; cx.fill(); }
+      if (c.size === 3 || z > .22 || (c.size === 2 && z > .1)) label(c.n, sx, sy + rp + 3, INK, c.size === 3 ? '600 12.5px "Golos Text", system-ui, sans-serif' : null);
     }
   }
   // одиночные точки
-  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.6) { const dz = drawSite(p.site, sx, sy, z > 6); if (z > 2.5) label(p.n, sx, sy + dz * .55 + 2, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = INK; cx.fillRect(sx - 2.5, sy - 2.5, 5, 5); } }
+  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.2) { const sz = clamp(z * 9, 30, 60); drawSite(p.site, sx, sy, sz); if (z > 2.5) label(p.n, sx, sy + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = PAPER; cx.strokeStyle = '#2a251e'; cx.lineWidth = 1.2; cx.fillRect(sx - 3, sy - 3, 6, 6); cx.strokeRect(sx - 3, sy - 3, 6, 6); } }
   // ночь
-  const dk = (1 - clamp(Math.sin((hour() - 6) / 15 * Math.PI), 0, 1)) * .42; if (dk > .01) { cx.fillStyle = `rgba(16,24,52,${dk})`; cx.fillRect(0, 0, cw, ch); }
+  const dk = (1 - clamp(Math.sin((hour() - 6) / 15 * Math.PI), 0, 1)) * .45; if (dk > .01) { cx.fillStyle = `rgba(10,16,40,${dk})`; cx.fillRect(0, 0, cw, ch); }
   // маршрут, костёр, транспорт, игрок
   const P = S2(g.pos.x, g.pos.y);
-  if (sel) { const e = trip ? { x: trip.tx, y: trip.ty } : clipRoute(g.pos.x, g.pos.y, sel.x, sel.y), E = S2(e.x, e.y); cx.beginPath(); cx.moveTo(P[0], P[1]); cx.lineTo(E[0], E[1]); cx.setLineDash([7, 5]); cx.strokeStyle = REDP; cx.lineWidth = 2.2; cx.stroke(); cx.setLineDash([]); cx.beginPath(); cx.moveTo(E[0] - 5, E[1] - 5); cx.lineTo(E[0] + 5, E[1] + 5); cx.moveTo(E[0] + 5, E[1] - 5); cx.lineTo(E[0] - 5, E[1] + 5); cx.stroke(); }
-  if (g.fire && g.time < g.fire.until) { const [sx, sy] = S2(g.fire.x, g.fire.y); cx.fillStyle = '#e07a2c'; cx.beginPath(); cx.arc(sx + 11, sy - 11, 3.5, 0, 7); cx.fill(); }
-  if (g.veh && g.veh.parked) { const [sx, sy] = S2(g.veh.parked.x, g.veh.parked.y); box(sx, sy, 18, PAPER, '#2f6f9f', 2); const im = glyphImg(VICON[g.veh.t], ['#2f6f9f', '#2f6f9f', '#2f6f9f']); if (im.complete && im.naturalWidth) cx.drawImage(im, sx - 6, sy - 6, 12, 12); }
-  const pr = RM ? 12 : 11 + Math.sin(performance.now() / 420) * 3; cx.beginPath(); cx.arc(P[0], P[1], pr, 0, 7); cx.strokeStyle = 'rgba(207,68,40,.55)'; cx.lineWidth = 1.6; cx.stroke();
-  cx.beginPath(); cx.arc(P[0], P[1], 5.5, 0, 7); cx.fillStyle = REDP; cx.fill(); cx.lineWidth = 2; cx.strokeStyle = PAPER; cx.stroke();
-  // масштаб и север
+  if (sel) { const e = trip ? { x: trip.tx, y: trip.ty } : clipRoute(g.pos.x, g.pos.y, sel.x, sel.y), E = S2(e.x, e.y); cx.beginPath(); cx.moveTo(P[0], P[1]); cx.lineTo(E[0], E[1]); cx.setLineDash([7, 5]); cx.strokeStyle = PAPER; cx.lineWidth = 4.5; cx.stroke(); cx.strokeStyle = REDP; cx.lineWidth = 2.4; cx.stroke(); cx.setLineDash([]); cx.beginPath(); cx.moveTo(E[0] - 5, E[1] - 5); cx.lineTo(E[0] + 5, E[1] + 5); cx.moveTo(E[0] + 5, E[1] - 5); cx.lineTo(E[0] - 5, E[1] + 5); cx.stroke(); }
+  if (g.fire && g.time < g.fire.until) { const [sx, sy] = S2(g.fire.x, g.fire.y); if (!drawArt(cx, 's:fire', sx + 16, sy - 14, 26)) { cx.fillStyle = '#e07a2c'; cx.beginPath(); cx.arc(sx + 11, sy - 11, 3.5, 0, 7); cx.fill(); } }
+  if (g.veh && g.veh.parked) { const [sx, sy] = S2(g.veh.parked.x, g.veh.parked.y); if (!drawArt(cx, 'v:' + g.veh.t, sx, sy, 34)) box(sx, sy, 18, PAPER, '#2f6f9f', 2); }
+  const pr = RM ? 13 : 12 + Math.sin(performance.now() / 420) * 3; cx.beginPath(); cx.arc(P[0], P[1], pr, 0, 7); cx.strokeStyle = 'rgba(244,238,220,.9)'; cx.lineWidth = 2; cx.stroke();
+  cx.beginPath(); cx.arc(P[0], P[1], 6.5, 0, 7); cx.fillStyle = REDP; cx.fill(); cx.lineWidth = 2.4; cx.strokeStyle = PAPER; cx.stroke();
+  // масштаб
   const kmv = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(k => k * z >= 46) || 2000, bl = kmv * z, bx = 12, by = ch - 14;
-  cx.strokeStyle = INK; cx.lineWidth = 1.6; cx.beginPath(); cx.moveTo(bx, by - 4); cx.lineTo(bx, by); cx.lineTo(bx + bl, by); cx.lineTo(bx + bl, by - 4); cx.stroke(); label(kmv + ' км', bx + bl / 2, by - 17, INK, '600 10.5px "JetBrains Mono", monospace');
+  cx.strokeStyle = PAPER; cx.lineWidth = 3.4; cx.beginPath(); cx.moveTo(bx, by - 4); cx.lineTo(bx, by); cx.lineTo(bx + bl, by); cx.lineTo(bx + bl, by - 4); cx.stroke(); cx.strokeStyle = INK; cx.lineWidth = 1.6; cx.stroke(); label(kmv + ' км', bx + bl / 2, by - 17, INK, '600 10.5px "JetBrains Mono", monospace');
 }
 function tapAt(sx, sy) {
   if (trip || g.over || g.combat || modalOpen()) return;
   const z = cam.z, wx = cam.x + (sx - vcx) / z, wy = cam.y + (sy - vcy) / z, tol = 16 / z;
   let best = null, bd = 1e9;
   const city = CITIES.find(c => hyp(c.x - wx, c.y - wy) <= Math.max(c.r, tol));
-  if (city) { const fine = city.r * z > 44; for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tol : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
+  if (city) { const fine = city.r * z > 44, tl = Math.max(tol, city.grid.step * .5); for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tl : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
   if (!best) for (const p of POIS) { if (!g.found[p.id]) continue; const d = hyp(p.x - wx, p.y - wy); if (d <= Math.max(2, tol) && d < bd) { bd = d; best = { x: p.x, y: p.y, n: p.n, id: p.id }; } }
   if (!best) { if (isWater(wx, wy)) return toast('Там вода.', ''); best = { x: wx, y: wy, n: city ? 'Улицы, ' + city.n : null }; }
   sel = best; scr = 'map'; renderNav(); renderSheet(false); renderRoute();
@@ -418,7 +430,7 @@ function frame(now) {
   draw();
 }
 function boot(data) {
-  g = (data && data.g && data.g.v === 3 ? data.g : null) || load() || newGame();
+  g = (data && data.g && data.g.v === 4 ? data.g : null) || load() || newGame();
   g.combat = null; trip = null; locate(); discover();
   resize(); new ResizeObserver(resize).observe(cv);
   buildTerrain(); cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; vcx = cw / 2; vcy = ch / 2;

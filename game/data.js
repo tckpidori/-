@@ -246,10 +246,11 @@ window.D = (function () {
     zimovye: { n: 'Зимовье', se: [2, 2], dng: .08, h: .7, loot: [['jerky',3,1,2],['wood',4,2,4],['salt',2],['matches',3,3,8],['leather',2,1,2],['a12',2,2,6],['furcoat',.8],['valenki',1],['ushanka',1],['knife',1],['pot',1],['fishrod',1],['tealeaf',2],['herbs',2]] },
     meteo: { n: 'Метеостанция', se: [2, 3], dng: .08, h: 1, loot: [['canned',3],['fuel',3,2,6],['electronics',2],['geiger',1.2],['coal',2],['tealeaf',2],['warmpants',1],['furcoat',.6],['battery',1],['book',1],['medkit',.8]] }
   };
+  const rpt = (t, n) => Array(n).fill(t);
   const CITYSET = {
-    1: ['house', 'house', 'house', 'shop', 'pharmacy', 'garage'],
-    2: ['house', 'house', 'house', 'house', 'shop', 'shop', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'warehouse', 'police', 'station', 'school'],
-    3: ['house', 'house', 'house', 'house', 'house', 'house', 'shop', 'shop', 'shop', 'pharmacy', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'gas', 'warehouse', 'warehouse', 'factory', 'factory', 'police', 'station', 'school', 'hunting']
+    1: [...rpt('house', 9), 'shop', 'pharmacy', 'garage'],
+    2: [...rpt('house', 20), 'shop', 'shop', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'warehouse', 'police', 'station', 'school'],
+    3: [...rpt('house', 38), 'shop', 'shop', 'shop', 'pharmacy', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'gas', 'warehouse', 'warehouse', 'factory', 'factory', 'police', 'station', 'school', 'hunting']
   };
   const CITYEXTRA = { 1: ['gas', 'warehouse', 'station', 'school'], 2: ['factory', 'hunting'], 3: [] };
   const POIT = {
@@ -296,16 +297,20 @@ window.D = (function () {
       if (ex.length) types.push(ex[Math.floor(r() * ex.length)]);
       if ((c.size === 3 && r() < .55) || (c.size === 2 && r() < .2)) types.push('military');
       if (c.f) types.push('base');
-      c.sites = []; const minD = c.r * .2;
-      for (const t of types) {
-        let x, y, tries = 0;
-        do { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * c.r * .85; x = c.x + Math.cos(a) * d; y = c.y + Math.sin(a) * d; tries++; }
-        while (tries < 60 && (isWater(x, y) || c.sites.some(q => Math.hypot(q.x - x, q.y - y) < minD)));
-        c.sites.push({ id: 's' + (sid++), x, y, t, n: BUILD[t].n, city: c.n });
-      }
+      // улицы — повёрнутая сетка; здания стоят в кварталах между улицами
+      c.sites = [];
+      const R = c.r * .86, n = types.length, step = Math.sqrt(Math.PI * R * R / (1.18 * n)), rot = .3 + r() * .55, cs = Math.cos(rot), sn = Math.sin(rot), m = Math.ceil(R / step) + 1, lots = [];
+      for (let i = -m; i < m; i++) for (let j = -m; j < m; j++) { const u = (i + .5) * step, v = (j + .5) * step, d = Math.hypot(u, v); if (d > R - step * .3) continue; const x = c.x + u * cs - v * sn, y = c.y + u * sn + v * cs; if (isWater(x, y)) continue; lots.push({ x, y, k: d + r() * R * .45 }); }
+      lots.sort((p, q) => p.k - q.k); lots.length = Math.min(lots.length, n);
+      for (let i = lots.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = lots[i]; lots[i] = lots[j]; lots[j] = t; }
+      const order = types.filter(t => t !== 'house').reverse().concat(types.filter(t => t === 'house'));
+      order.forEach((t, i) => { const q = lots[i]; if (!q) return; c.sites.push({ id: 's' + (sid++), x: q.x + (r() - .5) * step * .14, y: q.y + (r() - .5) * step * .14, t, n: BUILD[t].n, city: c.n, v: Math.floor(r() * 16) }); });
+      c.grid = { rot, step, R };
     }
     for (const p of POIS) p.site = { id: p.id, x: p.x, y: p.y, t: POIB[p.t], n: p.n, big: p.t === 'village' || p.t === 'farm' };
   })();
+  const ROADS = [];
+  (function () { const seen = {}; for (const a of CITIES) { const near = CITIES.filter(b => b !== a).map(b => [Math.hypot(a.x - b.x, a.y - b.y), b]).sort((p, q) => p[0] - q[0]).slice(0, 3); for (const [d, b] of near) { if (d > 1100) continue; const key = a.n < b.n ? a.n + '|' + b.n : b.n + '|' + a.n; if (seen[key]) continue; let wet = 0; for (let i = 1; i < 10; i++) if (isWater(a.x + (b.x - a.x) * i / 10, a.y + (b.y - a.y) * i / 10)) wet++; if (wet > 1) continue; seen[key] = 1; ROADS.push([a, b]); } } })();
 
   /* ---------- рецепты ---------- */
   const RECIPES = [
@@ -357,7 +362,12 @@ window.D = (function () {
   const ENEMIES = {
     wolf: { n: 'Волк', hp: 30, dmg: [5, 9], spd: 14, atk: 'bite', grp: [1, 3], xp: 10, drop: [['rawmeat', 1, 1, 2], ['leather', .6, 1, 1]] },
     dog: { n: 'Одичавший пёс', hp: 18, dmg: [3, 6], spd: 12, atk: 'bite', grp: [2, 4], xp: 6, drop: [['rawmeat', .5, 1, 1]] },
-    rat: { n: 'Крысиная стая', hp: 14, dmg: [2, 4], spd: 8, atk: 'bite', grp: [2, 4], xp: 4, drop: [] },
+    rat: { n: 'Крысы-мутанты', hp: 20, dmg: [3, 6], spd: 9, atk: 'bite', rad: 1, grp: [2, 3], xp: 7, drop: [] },
+    bigrat: { n: 'Крысиный вожак', hp: 45, dmg: [6, 10], spd: 10, atk: 'bite', rad: 1, grp: [1, 1], xp: 14, drop: [['leather', .4, 1, 1]] },
+    mwolf: { n: 'Волк-мутант', hp: 50, dmg: [8, 13], spd: 15, atk: 'bite', rad: 2, grp: [1, 2], xp: 18, drop: [['rawmeat', .6, 1, 2], ['leather', .6, 1, 1]] },
+    mboar: { n: 'Кабан-мутант', hp: 75, dmg: [10, 16], spd: 11, atk: 'blunt', rad: 2, grp: [1, 1], xp: 22, drop: [['rawmeat', .8, 2, 3], ['leather', .7, 1, 2]] },
+    mbear: { n: 'Медведь-мутант', hp: 160, dmg: [16, 26], spd: 10, atk: 'claw', rad: 3, grp: [1, 1], xp: 45, drop: [['rawmeat', 1, 3, 5], ['leather', 1, 2, 4]] },
+    snake: { n: 'Гадюка', hp: 10, dmg: [3, 5], spd: 6, atk: 'bite', venom: 1, grp: [1, 2], xp: 5, drop: [] },
     boar: { n: 'Кабан', hp: 45, dmg: [7, 12], spd: 11, atk: 'blunt', grp: [1, 2], xp: 12, drop: [['rawmeat', 1, 2, 3], ['leather', .7, 1, 1]] },
     bear: { n: 'Медведь', hp: 110, dmg: [12, 22], spd: 10, atk: 'claw', grp: [1, 1], xp: 30, drop: [['rawmeat', 1, 3, 5], ['leather', 1, 2, 3]] },
     glowdog: { n: 'Облучённый пёс', hp: 35, dmg: [6, 11], spd: 13, atk: 'bite', rad: 3, grp: [1, 3], xp: 12, drop: [] },
@@ -373,10 +383,10 @@ window.D = (function () {
     artguard: { n: 'Дружинник Артели', f: 'art', hum: 1, hp: 50, dmg: [12, 20], spd: 5, atk: 'shot', rng: 18, acc: .6, grp: [2, 3], xp: 18, drop: [['a12', .8, 2, 6], ['scrap', .6, 1, 3], ['wire', .5, 1, 2]] }
   };
   const WILD = {
-    forest: [['wolf', 3], ['boar', 2], ['bear', .7], ['dog', 2], ['marauder', 2], ['gunman', 1]],
+    forest: [['wolf', 3], ['boar', 2], ['bear', .7], ['dog', 2], ['marauder', 2], ['gunman', 1], ['snake', 1]],
     taiga: [['wolf', 4], ['bear', 1.5], ['boar', 1], ['marauder', 1], ['deserter', .7]],
-    steppe: [['wolf', 2], ['dog', 2], ['marauder', 2], ['gunman', 1.5]],
-    desert: [['dog', 2], ['marauder', 2], ['gunman', 1]],
+    steppe: [['wolf', 2], ['dog', 2], ['marauder', 2], ['gunman', 1.5], ['snake', 1.5]],
+    desert: [['dog', 2], ['marauder', 2], ['gunman', 1], ['snake', 2]],
     tundra: [['wolf', 3], ['bear', 1.5]]
   };
 
@@ -431,5 +441,5 @@ window.D = (function () {
     thrifty: { n: 'Запасливый', d: 'Голод и жажда растут на 6% медленнее за уровень.' }
   };
 
-  return { W, H, proj, unproj, hash2, vnoise, fbm, mulberry32, hashStr, SEAS, ISLES, LAKES, RIVERS, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, CITYSET, CITYEXTRA, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, STATIONS, PERKS };
+  return { W, H, proj, unproj, hash2, vnoise, fbm, mulberry32, hashStr, SEAS, ISLES, LAKES, RIVERS, isWater, biome, BIOME, CITIES, CITY, ZONES, FACTIONS, BASES, STOCKS, ITEMS, CATS, SLOTS, BUILD, CITYSET, CITYEXTRA, POIT, POIS, RECIPES, VEH, ENEMIES, WILD, DIS, WOUNDS, SKILLS, SKILLD, STATIONS, PERKS, ROADS };
 })();

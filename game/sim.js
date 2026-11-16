@@ -4,7 +4,7 @@ const { W, H, unproj, mulberry32, hashStr, isWater, biome, BIOME, CITIES, CITY, 
 const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.floor(rnd(a, b + 1)), chance = p => Math.random() < p, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
 const pickW = l => { let t = 0; for (const x of l) t += x[1]; let r = Math.random() * t; for (const x of l) { r -= x[1]; if (r <= 0) return x; } return l[l.length - 1]; };
 const WEATHER = { clear: { n: 'Ясно', t: 0 }, cloud: { n: 'Пасмурно', t: -1 }, rain: { n: 'Дождь', t: -3 }, snow: { n: 'Снег', t: -2 }, blizzard: { n: 'Метель', t: -7 } };
-const SAVE_KEY = 'pepel-trakt-v3';
+const SAVE_KEY = 'pepel-trakt-v4';
 
 let g = null, curHere = { city: null, site: null }, curBiome = 'forest', trip = null, combatCb = null;
 const UIH = { toast() {}, refresh() {}, combat() {}, over() {}, tripEnd() {} };
@@ -82,7 +82,7 @@ const fireOn = () => !!(g.fire && g.time < g.fire.until && hyp(g.fire.x - g.pos.
 function newGame() {
   const s0 = CITY['Рязань'].sites.find(s => s.t === 'house');
   g = {
-    v: 3, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: s0.x, y: s0.y },
+    v: 4, seed: (Math.random() * 2147483647) | 0, time: 0, pos: { x: s0.x, y: s0.y },
     s: { hp: 100, hunger: 75, thirst: 75, warmth: 80, rad: 0, mood: 60 },
     inv: { crackers: 2, water: 2, matches: 6, ragband: 1, cloth: 2 },
     eq: { melee: 'knife', ranged: null, head: null, body: 'jacket', legs: 'pants', feet: 'shoes', mask: null, armor: null, back: null },
@@ -98,7 +98,7 @@ function newGame() {
   return g;
 }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(g)); } catch (e) { /* хранилище недоступно */ } }
-function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 3 && o.pos && o.ground && o.st) return o; } } catch (e) { /* нет сохранения */ } return null; }
+function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 4 && o.pos && o.ground && o.st) return o; } } catch (e) { /* нет сохранения */ } return null; }
 
 /* ---------- навыки ---------- */
 const xpNeed = l => 20 * (l + 1);
@@ -364,10 +364,10 @@ function actBoard() { const v = g.veh; if (!v || !v.parked || hyp(v.parked.x - g
 /* ---------- бой ---------- */
 function encPool(ctx) {
   const { x, y } = g.pos, f = factionAt(x, y); let pool;
-  if (ctx === 'city') pool = [['rat', 3], ['dog', 3], ['marauder', 3], ['gunman', 1.5]];
+  if (ctx === 'city') pool = [['rat', 3], ['bigrat', 1], ['dog', 3], ['marauder', 3], ['gunman', 1.5]];
   else if (ctx === 'mil') pool = [['gunman', 2], ['deserter', 3], ['marauder', 1]];
   else pool = WILD[curBiome].slice();
-  if (radAt(x, y) > .15) pool = pool.concat([['glowdog', 4], ['burnt', 3]]);
+  if (radAt(x, y) > .15) pool = pool.concat([['glowdog', 4], ['burnt', 3], ['mwolf', 2], ['mboar', 1.5], ['mbear', .6]]);
   if (f && hostile(f) && ctx === 'wild') pool = pool.concat([[FACTIONS[f].unit, 7]]);
   return pool;
 }
@@ -383,7 +383,7 @@ function playerAcc(w, d) { const base = w.rng ? (d > w.rng ? .1 : w.acc - d / w.
 const fleeChance = () => { const c = g.combat, al = c.en.filter(x => x.hp > 0), md = Math.min(...al.map(x => x.d)); return clamp(.3 + md / 50 * .4 + (withVeh() ? .25 : 0) - (g.wounds.some(x => x.t === 'fracture') ? .25 : 0) - (al.some(x => ENEMIES[x.k].rng >= x.d) ? .15 : 0), .08, .95); };
 const bribeCost = () => 12 * g.combat.en.filter(x => x.hp > 0).length;
 function hitPlayer(x, e, push) {
-  const dmg = Math.max(1, ri(e.dmg[0], e.dmg[1]) - armor()); g.s.hp -= dmg; if (e.rad) g.s.rad += e.rad;
+  const dmg = Math.max(1, ri(e.dmg[0], e.dmg[1]) - armor()); g.s.hp -= dmg; if (e.rad) g.s.rad += e.rad; if (e.venom && chance(.35)) getSick('poison', 'Змеиный яд: тошнит и темнеет в глазах.');
   let w = null; const r = Math.random();
   if (e.atk === 'bite') { if (r < .45) w = 'bite'; } else if (e.atk === 'claw') { if (r < .6) w = 'cut'; } else if (e.atk === 'blade') { if (r < .5) w = 'cut'; }
   else if (e.atk === 'blunt') { if (r < .08) w = 'fracture'; else if (r < .5) w = 'bruise'; } else if (e.atk === 'shot') { if (r < .6) w = 'gunshot'; }
