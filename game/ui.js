@@ -252,11 +252,12 @@ function renderTrade() {
 function showOver() { const o = g.over; $('#modal').dataset.kind = 'over'; showModal(`<div class="card"><div class="eyebrow">Конец пути</div><h3 class="big">Ты не выжил</h3><p class="desc">${esc(o.reason)}.</p><div class="kv"><span>Дней</span><b class="mono">${dayNum()}</b><span>Пройдено</span><b class="mono">${fmtKm(g.stats.km)}</b><span>Побед</span><b class="mono">${g.stats.kills}</b></div><button class="btn row primary" data-act="newyes">Начать заново</button></div>`); }
 
 /* ---------- действия ---------- */
-function fresh() { hideModal(); newGame(); sel = null; pick = null; stn = null; perkSnooze = 0; scr = 'map'; confirmNew = false; cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; cam.follow = true; save(); render(); }
+function focusCity() { const c = curHere.city; if (c && cw) { cam.follow = false; cam.x = c.x; cam.y = c.y; cam.z = clamp(Math.min(cw, ch) * .96 / (2 * c.r), 2, ZMAX); } else { cam.follow = true; if (cam.z < 2) cam.z = 6; } }
+function fresh() { hideModal(); newGame(); sel = null; pick = null; stn = null; perkSnooze = 0; scr = 'map'; confirmNew = false; cam.x = g.pos.x; cam.y = g.pos.y; focusCity(); save(); render(); }
 const FREE = { scr: 1, cat: 1, stn: 1, rsel: 1, 'q-': 1, 'q+': 1, pickinv: 1, pickeq: 1, use: 1, equip: 1, unequip: 1, togf: 1, newgame: 1, newno: 1 };
 function act(a, arg) {
   if (a === 'zin' || a === 'zout') { cam.z = clamp(cam.z * (a === 'zin' ? 1.6 : 1 / 1.6), zMin(), ZMAX); return; }
-  if (a === 'center') { cam.follow = true; return; }
+  if (a === 'center') { focusCity(); return; }
   if (a === 'newyes') return fresh();
   if (a === 'cb') { const p = String(arg).split(':'); return cAct(p[0], p[1]); }
   if (a === 'stop') return stopTrip('Остановился.');
@@ -269,7 +270,7 @@ function act(a, arg) {
   if (trip && !FREE[a]) return toast('Сначала остановись.', '');
   switch (a) {
     case 'scr': scr = scr === arg ? 'map' : arg; pick = null; stn = null; confirmNew = false; renderNav(); renderRoute(); renderSheet(false); break;
-    case 'go': if (sel && startTrip(sel.x, sel.y)) { cam.follow = true; scr = 'map'; renderNav(); renderSheet(false); renderRoute(); } break;
+    case 'go': if (sel && startTrip(sel.x, sel.y)) { cam.follow = !(curHere.city && hyp(sel.x - curHere.city.x, sel.y - curHere.city.y) <= curHere.city.r); scr = 'map'; renderNav(); renderSheet(false); renderRoute(); } break;
     case 'unsel': sel = null; renderRoute(); break;
     case 'fire': actFire(); break; case 'stoke': actStoke(); break; case 'rest': actRest(+arg); break;
     case 'water': actWater(); break; case 'wood': actWood(); break; case 'forage': actForage(); break; case 'hunt': actHunt(); break; case 'fish': actFish(); break;
@@ -291,7 +292,7 @@ function act(a, arg) {
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) act(b.dataset.act, b.dataset.arg); });
 UIH.toast = toast; UIH.refresh = render; UIH.combat = () => { renderHud(); renderCombat(); }; UIH.over = showOver;
-UIH.tripEnd = arrived => { if (sel && hyp(sel.x - g.pos.x, sel.y - g.pos.y) < .3) sel = null; if (arrived && curHere.site) scr = 'place'; };
+UIH.tripEnd = arrived => { if (sel && hyp(sel.x - g.pos.x, sel.y - g.pos.y) < .3) sel = null; if (arrived && curHere.site) scr = 'place'; if (arrived && curHere.city && cam.z < 2) focusCity(); };
 
 /* ---------- карта ---------- */
 const cv = $('#map'), cx = cv.getContext('2d'), cam = { x: 0, y: 0, z: 8, follow: true }, ZMAX = 30;
@@ -326,7 +327,7 @@ function drawSite(s, sx, sy, sz) {
   const im = glyphImg(BICON[s.t], INKP); if (im.complete && im.naturalWidth) { cx.globalAlpha = empty ? .35 : 1; cx.drawImage(im, sx - b * .34, sy - b * .34, b * .68, b * .68); cx.globalAlpha = 1; }
   if (cur || isSel) { cx.beginPath(); cx.arc(sx, sy, b * .9, 0, 7); cx.strokeStyle = REDP; cx.lineWidth = 2; cx.stroke(); }
 }
-const siteSize = (c, z) => clamp(c.grid.step * z * .84, 22, 78);
+const siteSize = (c, z) => clamp(c.grid.s * z * 1.42, 24, 130);
 const TDENS = { forest: .15, taiga: .12, steppe: .55, tundra: .5, desert: .6 }, TSIZE = { forest: 46, taiga: 46, steppe: 34, tundra: 36, desert: 40 };
 function draw() {
   const z = cam.z;
@@ -361,24 +362,35 @@ function draw() {
   // территории
   if (showF) for (const b of D.BASES) { const [sx, sy] = S2(b.x, b.y), r = b.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.setLineDash([2, 6]); cx.strokeStyle = FACTIONS[b.f].c; cx.globalAlpha = .95; cx.lineWidth = 1.8; cx.stroke(); cx.globalAlpha = .06; cx.fillStyle = FACTIONS[b.f].c; cx.fill(); cx.globalAlpha = 1; cx.setLineDash([]); }
   // города
+  let focus = null;
   for (const c of vis) {
     const [sx, sy] = S2(c.x, c.y), r = c.r * z, G = c.grid;
     if (r > 44) {
-      cx.save(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fillStyle = '#a8a08c'; cx.fill(); cx.clip();
-      const cs = Math.cos(G.rot), sn = Math.sin(G.rot), m = Math.ceil(G.R / G.step), wst = clamp(G.step * z * .14, 2, 14);
-      const streets = (col, add, dash) => { cx.strokeStyle = col; cx.setLineDash(dash || []); for (let pass = 0; pass < 2; pass++) for (let i = -m; i <= m; i++) { const d = i * G.step; if (Math.abs(d) >= c.r) continue; const hl = Math.sqrt(c.r * c.r - d * d), ax = pass ? d : -hl, ay = pass ? -hl : d, bx = pass ? d : hl, by = pass ? hl : d; cx.lineWidth = (i === 0 ? wst * 1.5 : wst) + add; cx.beginPath(); cx.moveTo(sx + (ax * cs - ay * sn) * z, sy + (ax * sn + ay * cs) * z); cx.lineTo(sx + (bx * cs - by * sn) * z, sy + (bx * sn + by * cs) * z); cx.stroke(); } cx.setLineDash([]); };
-      streets('#4c4840', 2.4); streets('#77736a', 0); if (wst > 5) streets('rgba(226,220,200,.55)', -wst + 1.2, [8, 10]);
-      cx.restore();
-      cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 3; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#2a251e'; cx.stroke();
+      if (r * 2 > Math.min(cw, ch) * .6) focus = [sx, sy, r];
+      cx.save(); cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fillStyle = '#b39c74'; cx.fill(); cx.clip();
+      if (detail) { cx.save(); cx.translate(-((cam.x * z) % 128), -((cam.y * z) % 128)); cx.fillStyle = detail; cx.fillRect(-128, -128, cw + 384, ch + 384); cx.restore(); }
+      // улицы изометрической сеткой: кварталы 3×2 участка
+      const s = G.s * z, m = Math.ceil(c.r / G.s) + 3, wst = clamp(s * .2, 2, 16);
+      const streets = (col, add, dash) => { cx.strokeStyle = col; cx.setLineDash(dash || []); cx.lineWidth = wst + add; cx.beginPath();
+        for (let i = -m; i <= m; i++) { if ((((i - G.ph[0]) % 3) + 3) % 3) continue; cx.moveTo(sx + (i + m) * s, sy + (i - m) * s * .5); cx.lineTo(sx + (i - m) * s, sy + (i + m) * s * .5); }
+        for (let j = -m; j <= m; j++) { if ((((j - G.ph[1]) % 2) + 2) % 2) continue; cx.moveTo(sx + (-m - j) * s, sy + (-m + j) * s * .5); cx.lineTo(sx + (m - j) * s, sy + (m + j) * s * .5); }
+        cx.stroke(); cx.setLineDash([]); };
+      streets('#4a443a', 3); streets('#7d776b', 0); if (wst > 6) streets('rgba(228,220,198,.5)', -wst + 1.3, [9, 11]);
       const sz = siteSize(c, z);
-      for (const s of c.sites) { const p = S2(s.x, s.y); if (p[0] < -50 || p[1] < -50 || p[0] > cw + 50 || p[1] > ch + 50) continue; drawSite(s, p[0], p[1], sz); if (sz > 54 || curHere.site === s || (sel && sel.id === s.id)) label(s.n, p[0], p[1] + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); }
-      label(c.n, sx, Math.max(6, sy - r - 20), INK, '600 14px "Unbounded", "Golos Text", sans-serif');
+      for (const d of c.deco) { const p = S2(d.x, d.y); if (p[0] < -40 || p[1] < -40 || p[0] > cw + 40 || p[1] > ch + 40) continue; drawArt(cx, d.t, p[0], p[1] - sz * .08, sz * d.k); }
+      for (const st of c.sitesY) { const p = S2(st.x, st.y); if (p[0] < -70 || p[1] < -70 || p[0] > cw + 70 || p[1] > ch + 70) continue; drawSite(st, p[0], p[1] - sz * .14, sz); }
+      const sh = cx.createRadialGradient(sx, sy, r * .78, sx, sy, r); sh.addColorStop(0, 'rgba(30,22,12,0)'); sh.addColorStop(1, 'rgba(30,22,12,.5)'); cx.fillStyle = sh; cx.fillRect(sx - r, sy - r, r * 2, r * 2);
+      cx.restore();
+      cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 7; cx.strokeStyle = '#1f1a14'; cx.stroke(); cx.lineWidth = 2.5; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#cdbf9a'; cx.stroke();
+      for (const st of c.sites) if (curHere.site === st || (sel && sel.id === st.id)) { const p = S2(st.x, st.y); label(st.n, p[0], p[1] + sz * .34, INK, '600 11px "Golos Text", system-ui, sans-serif'); }
+      label(c.n, sx, clamp(sy - r - 22, 6, ch - 30), INK, '600 14px "Unbounded", "Golos Text", sans-serif');
     } else {
-      const rp = Math.max(c.size * 1.5 + 3, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#cfc6ae'; cx.fill(); cx.lineWidth = c.size === 3 ? 2.6 : 1.8; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#2a251e'; cx.stroke();
-      if (rp > 9) drawArt(cx, 'h:' + (hashStr(c.n) & 3), sx, sy, rp * 1.7); else { cx.beginPath(); cx.arc(sx, sy, Math.min(2.5, rp * .4), 0, 7); cx.fillStyle = '#2a251e'; cx.fill(); }
+      const rp = Math.max(c.size * 1.5 + 3, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#b39c74'; cx.fill(); cx.lineWidth = c.size === 3 ? 3 : 2.2; cx.strokeStyle = '#1f1a14'; cx.stroke(); if (c.f) { cx.lineWidth = 1.4; cx.strokeStyle = FACTIONS[c.f].c; cx.stroke(); }
+      if (rp > 9) drawArt(cx, 'h:' + (hashStr(c.n) & 3), sx, sy, rp * 1.7); else { cx.beginPath(); cx.arc(sx, sy, Math.min(2.5, rp * .4), 0, 7); cx.fillStyle = '#1f1a14'; cx.fill(); }
       if (c.size === 3 || z > .22 || (c.size === 2 && z > .1)) label(c.n, sx, sy + rp + 3, INK, c.size === 3 ? '600 12.5px "Golos Text", system-ui, sans-serif' : null);
     }
   }
+  if (focus) { cx.beginPath(); cx.rect(0, 0, cw, ch); cx.moveTo(focus[0] + focus[2] + 4, focus[1]); cx.arc(focus[0], focus[1], focus[2] + 4, 0, Math.PI * 2, true); cx.closePath(); cx.fillStyle = 'rgba(8,14,26,.42)'; cx.fill(); }
   // одиночные точки
   if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.2) { const sz = clamp(z * 9, 30, 60); drawSite(p.site, sx, sy, sz); if (z > 2.5) label(p.n, sx, sy + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = PAPER; cx.strokeStyle = '#2a251e'; cx.lineWidth = 1.2; cx.fillRect(sx - 3, sy - 3, 6, 6); cx.strokeRect(sx - 3, sy - 3, 6, 6); } }
   // ночь
@@ -399,7 +411,7 @@ function tapAt(sx, sy) {
   const z = cam.z, wx = cam.x + (sx - vcx) / z, wy = cam.y + (sy - vcy) / z, tol = 16 / z;
   let best = null, bd = 1e9;
   const city = CITIES.find(c => hyp(c.x - wx, c.y - wy) <= Math.max(c.r, tol));
-  if (city) { const fine = city.r * z > 44, tl = Math.max(tol, city.grid.step * .5); for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tl : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
+  if (city) { const fine = city.r * z > 44, tl = Math.max(tol, city.grid.s * .75); for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tl : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
   if (!best) for (const p of POIS) { if (!g.found[p.id]) continue; const d = hyp(p.x - wx, p.y - wy); if (d <= Math.max(2, tol) && d < bd) { bd = d; best = { x: p.x, y: p.y, n: p.n, id: p.id }; } }
   if (!best) { if (isWater(wx, wy)) return toast('Там вода.', ''); best = { x: wx, y: wy, n: city ? 'Улицы, ' + city.n : null }; }
   sel = best; scr = 'map'; renderNav(); renderSheet(false); renderRoute();
@@ -430,10 +442,10 @@ function frame(now) {
   draw();
 }
 function boot(data) {
-  g = (data && data.g && data.g.v === 4 ? data.g : null) || load() || newGame();
+  g = (data && data.g && data.g.v === 5 ? data.g : null) || load() || newGame();
   g.combat = null; trip = null; locate(); discover();
   resize(); new ResizeObserver(resize).observe(cv);
-  buildTerrain(); cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; vcx = cw / 2; vcy = ch / 2;
+  buildTerrain(); cam.x = g.pos.x; cam.y = g.pos.y; cam.z = 8; vcx = cw / 2; vcy = ch / 2; focusCity();
   scr = 'map'; render(); if (g.over) showOver();
   requestAnimationFrame(frame);
 }

@@ -248,9 +248,9 @@ window.D = (function () {
   };
   const rpt = (t, n) => Array(n).fill(t);
   const CITYSET = {
-    1: [...rpt('house', 9), 'shop', 'pharmacy', 'garage'],
-    2: [...rpt('house', 20), 'shop', 'shop', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'warehouse', 'police', 'station', 'school'],
-    3: [...rpt('house', 38), 'shop', 'shop', 'shop', 'pharmacy', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'gas', 'warehouse', 'warehouse', 'factory', 'factory', 'police', 'station', 'school', 'hunting']
+    1: [...rpt('house', 13), 'shop', 'pharmacy', 'garage'],
+    2: [...rpt('house', 30), 'shop', 'shop', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'warehouse', 'police', 'station', 'school'],
+    3: [...rpt('house', 54), 'shop', 'shop', 'shop', 'pharmacy', 'pharmacy', 'hospital', 'garage', 'garage', 'gas', 'gas', 'warehouse', 'warehouse', 'factory', 'factory', 'police', 'station', 'school', 'hunting']
   };
   const CITYEXTRA = { 1: ['gas', 'warehouse', 'station', 'school'], 2: ['factory', 'hunting'], 3: [] };
   const POIT = {
@@ -297,15 +297,17 @@ window.D = (function () {
       if (ex.length) types.push(ex[Math.floor(r() * ex.length)]);
       if ((c.size === 3 && r() < .55) || (c.size === 2 && r() < .2)) types.push('military');
       if (c.f) types.push('base');
-      // улицы — повёрнутая сетка; здания стоят в кварталах между улицами
-      c.sites = [];
-      const R = c.r * .86, n = types.length, step = Math.sqrt(Math.PI * R * R / (1.18 * n)), rot = .3 + r() * .55, cs = Math.cos(rot), sn = Math.sin(rot), m = Math.ceil(R / step) + 1, lots = [];
-      for (let i = -m; i < m; i++) for (let j = -m; j < m; j++) { const u = (i + .5) * step, v = (j + .5) * step, d = Math.hypot(u, v); if (d > R - step * .3) continue; const x = c.x + u * cs - v * sn, y = c.y + u * sn + v * cs; if (isWater(x, y)) continue; lots.push({ x, y, k: d + r() * R * .45 }); }
-      lots.sort((p, q) => p.k - q.k); lots.length = Math.min(lots.length, n);
+      // изометрическая сетка участков; улицы идут между кварталами 3×2
+      c.sites = []; c.deco = [];
+      const R = c.r * .93, n = types.length, sg = Math.sqrt(Math.PI * R * R / (1.75 * n)), m = Math.ceil(R / sg) + 2, lots = [];
+      for (let i = -m; i < m; i++) for (let j = -m; j < m; j++) { const u = i + .5, v = j + .5, x = c.x + (u - v) * sg, y = c.y + (u + v) * sg * .5, d = Math.hypot(x - c.x, y - c.y); if (d > R - sg * .5 || isWater(x, y)) continue; lots.push({ x, y, k: d + r() * R * .22 }); }
+      lots.sort((p, q) => p.k - q.k);
+      for (const q of lots.splice(Math.min(lots.length, n))) if (r() < .7) c.deco.push({ x: q.x, y: q.y, t: r() < .5 ? 't:forest' : 't:taiga', k: .5 + r() * .25 });
       for (let i = lots.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = lots[i]; lots[i] = lots[j]; lots[j] = t; }
       const order = types.filter(t => t !== 'house').reverse().concat(types.filter(t => t === 'house'));
-      order.forEach((t, i) => { const q = lots[i]; if (!q) return; c.sites.push({ id: 's' + (sid++), x: q.x + (r() - .5) * step * .14, y: q.y + (r() - .5) * step * .14, t, n: BUILD[t].n, city: c.n, v: Math.floor(r() * 16) }); });
-      c.grid = { rot, step, R };
+      order.forEach((t, i) => { const q = lots[i]; if (!q) return; c.sites.push({ id: 's' + (sid++), x: q.x, y: q.y, t, n: BUILD[t].n, city: c.n, v: Math.floor(r() * 16) }); });
+      c.sitesY = c.sites.slice().sort((p, q) => p.y - q.y); c.deco.sort((p, q) => p.y - q.y);
+      c.grid = { s: sg, R, ph: [Math.floor(r() * 3), Math.floor(r() * 2)] };
     }
     for (const p of POIS) p.site = { id: p.id, x: p.x, y: p.y, t: POIB[p.t], n: p.n, big: p.t === 'village' || p.t === 'farm' };
   })();
