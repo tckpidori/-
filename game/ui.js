@@ -34,7 +34,8 @@ function renderHud() {
   const h = hour(), s = g.s;
   $('#clock').innerHTML = `<span>День ${dayNum()} · ${dateStr()}</span><span>${pad(Math.floor(h))}:${pad(Math.floor(h % 1 * 60))}</span><span class="cold">${fmtT(tempAt(g.pos.x, g.pos.y))}</span><span class="dim">${WEATHER[g.weather].n}</span>`;
   const rows = [['cross', 'Здоровье', 'var(--blood)', s.hp, s.hp < 30], ['fork', 'Сытость', 'var(--lamp)', s.hunger, s.hunger < 20], ['drop', 'Вода', 'var(--frost)', s.thirst, s.thirst < 20], ['thermo', 'Тепло', 'var(--ember)', s.warmth, s.warmth < 25], ['rad', 'Радиация', 'var(--ash)', s.rad, s.rad >= 30], ['face', 'Настрой', 'var(--soft)', s.mood, s.mood < 25]];
-  $('#stats').innerHTML = rows.map(r => `<div class="need${r[4] ? ' crit' : ''}" title="${r[1]}"><span style="color:${r[2]}">${uiIcon(r[0])}</span><b>${Math.round(r[3])}</b></div>`).join('');
+  const UK = { cross: 'u:hp', fork: 'u:food', drop: 'u:water', thermo: 'u:warm', rad: 'u:rad', face: 'u:mood' };
+  $('#stats').innerHTML = rows.map(r => `<div class="need${r[4] ? ' crit' : ''}" title="${r[1]}"><span class="ni" style="color:${r[2]}">${art(UK[r[0]]) || uiIcon(r[0])}</span><b>${Math.round(r[3])}</b><i class="nb"><i style="width:${clamp(r[3], 0, 100)}%;background:${r[2]}"></i></i></div>`).join('');
   const c = [];
   if (g.wounds.some(w => w.bl > 0 && !w.b)) c.push(['bad', 'Кровотечение']);
   if (g.wounds.length) c.push(['', 'Раны: ' + g.wounds.length]);
@@ -46,7 +47,7 @@ function renderHud() {
 }
 function renderNav() {
   const bad = { place: Object.keys(groundHere()).length, camp: RECIPES.filter(r => !craftMiss(r).length).length, char: g.wounds.length + Object.keys(g.dis).length + g.perkPts };
-  $('#nav').innerHTML = [['map', 'mapf', 'Карта'], ['place', 'lens', 'Место'], ['inv', 'pack', 'Рюкзак'], ['camp', 'tent', 'Лагерь'], ['char', 'person', 'Герой'], ['world', 'globe', 'Мир']].map(n => `<button class="${scr === n[0] ? 'on' : ''}" data-act="scr" data-arg="${n[0]}">${uiIcon(n[1])}<span>${n[2]}</span>${bad[n[0]] ? `<i class="bdg">${bad[n[0]]}</i>` : ''}</button>`).join('');
+  $('#nav').innerHTML = [['map', 'mapf', 'Карта'], ['place', 'lens', 'Место'], ['inv', 'pack', 'Рюкзак'], ['camp', 'tent', 'Лагерь'], ['char', 'person', 'Герой'], ['world', 'globe', 'Мир']].map(n => `<button class="${scr === n[0] ? 'on' : ''}" data-act="scr" data-arg="${n[0]}"><span class="nvi">${art({ map: 'u:map', place: 'u:lens', inv: 'u:pack', camp: 'u:tent', char: 'u:hero', world: 'u:globe' }[n[0]]) || uiIcon(n[1])}</span><span>${n[2]}</span>${bad[n[0]] ? `<i class="bdg">${bad[n[0]]}</i>` : ''}</button>`).join('');
 }
 function renderRoute() {
   const el = $('#route');
@@ -109,7 +110,7 @@ function renderInv() {
     + `<div class="hrow"><div class="eyebrow">Груз</div><div class="mono${w > cap ? ' bad' : ''}">${w.toFixed(1)} / ${cap} кг</div></div><div class="hp"><i style="width:${Math.min(100, w / cap * 100)}%;background:${w > cap ? 'var(--blood)' : 'var(--soft)'}"></i></div>`
     + (ks.length ? `<div class="grid">${ks.map(k => cell(icon(k), ITEMS[k].n, { n: qty(g.inv[k]), act: 'pickinv', arg: k, on: pick && pick.t === 'inv' && pick.k === k })).join('')}</div>` : '<p class="desc">Пусто.</p>') + '</div></div>';
   const slot = s => { const k = g.eq[s], l = SLOTS.find(x => x[0] === s)[1]; return `<div style="grid-area:${s}">${k ? cell(icon(k), ITEMS[k].n, { act: 'pickeq', arg: s, on: pick && pick.t === 'eq' && pick.k === s }) : cell('', l, { dim: 1 })}</div>`; };
-  let right = `<div class="doll">${['head', 'mask', 'body', 'back', 'armor', 'legs', 'melee', 'feet', 'ranged'].map(slot).join('')}<div class="fig" style="grid-area:fig">${uiIcon('person', '#5d6c77')}<b>уровень ${g.lvl}</b></div></div>`
+  let right = `<div class="doll">${['head', 'mask', 'body', 'back', 'armor', 'legs', 'melee', 'feet', 'ranged'].map(slot).join('')}<div class="fig${HAVE.includes('hero') ? ' hero' : ''}" style="grid-area:fig">${HAVE.includes('hero') ? '<span class="heroimg"></span>' : uiIcon('person', '#73674f')}<b>уровень ${g.lvl}</b></div></div>`
     + `<div><div class="hp thin"><i style="width:${g.xp / lvlNeed(g.lvl) * 100}%;background:var(--lamp)"></i></div><div class="ef">Опыт: ${g.xp} из ${lvlNeed(g.lvl)}</div></div>`;
   if (pick) {
     const k = pick.t === 'eq' ? g.eq[pick.k] : pick.k, it = ITEMS[k]; let b = '';
@@ -135,7 +136,7 @@ function renderCamp() {
     const S = STATIONS[k], lv = S.up ? g.st[k] : 0, max = S.up ? S.up.length : 0, can = S.up && lv < max && Object.entries(S.up[lv]).every(([i, q]) => has(i, q)), n = RECIPES.filter(r => r.st[0] === k && !craftMiss(r).length).length;
     return `<button class="stile" data-act="stn" data-arg="${k}"><span class="sic">${art('s:' + k) || svgStr(SICON[k][0], SICON[k][1])}</span><span class="nm">${S.n}</span><small>${k === 'fire' ? (fire ? 'горит ещё ' + fmtH(g.fire.until - g.time) : 'не горит') : lv ? `уровень ${lv} из ${max}` : 'не построено'}</small>${n ? `<i class="bdg">${n}</i>` : ''}${can ? '<i class="upm">▲ можно улучшить</i>' : ''}</button>`;
   }).join('');
-  return `<div class="panes one"><div class="pane"><div class="sgrid">${tiles}</div><p class="desc">Стоянка всегда с тобой. Чем выше уровень станка, тем больше на нём рецептов. Цифра на плитке — сколько вещей можно сделать прямо сейчас.</p></div></div>`;
+  return `<div class="panes one"><div class="pane">${HAVE.includes('camp') ? '<div class="banner"><span>Стоянка</span></div>' : ''}<div class="sgrid">${tiles}</div><p class="desc">Стоянка всегда с тобой. Чем выше уровень станка, тем больше на нём рецептов. Цифра на плитке — сколько вещей можно сделать прямо сейчас.</p></div></div>`;
 }
 function renderStation() {
   const S = STATIONS[stn], lv = S.up ? g.st[stn] : 0, max = S.up ? S.up.length : 0, fire = fireOn();
@@ -398,7 +399,7 @@ function draw() {
       cx.restore();
       cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.lineWidth = 7; cx.strokeStyle = '#1f1a14'; cx.stroke(); cx.lineWidth = 2.5; cx.strokeStyle = c.f ? FACTIONS[c.f].c : '#cdbf9a'; cx.stroke();
       for (const st of c.sites) if (curHere.site === st || (sel && sel.id === st.id)) { const p = S2(st.x, st.y); label(st.n, p[0], p[1] + sz * .34, INK, '600 11px "Golos Text", system-ui, sans-serif'); }
-      label(c.n, sx, clamp(sy - r - 22, 6, ch - 30), INK, '600 14px "Unbounded", "Golos Text", sans-serif');
+      label(c.n, sx, clamp(sy - r - 22, 6, ch - 30), INK, '600 14px "Oswald", "Golos Text", sans-serif');
     } else {
       const rp = Math.max(c.size * 1.5 + 3, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#b39c74'; cx.fill(); cx.lineWidth = c.size === 3 ? 3 : 2.2; cx.strokeStyle = '#1f1a14'; cx.stroke(); if (c.f) { cx.lineWidth = 1.4; cx.strokeStyle = FACTIONS[c.f].c; cx.stroke(); }
       if (rp > 9) drawArt(cx, 'h:' + (hashStr(c.n) & 3), sx, sy, rp * 1.7); else { cx.beginPath(); cx.arc(sx, sy, Math.min(2.5, rp * .4), 0, 7); cx.fillStyle = '#1f1a14'; cx.fill(); }
