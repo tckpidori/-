@@ -8,7 +8,7 @@ const fmtH = h => { const m = Math.round(h * 60); if (m < 60) return m + ' ми�
 const fmtKm = k => (k < 10 ? k.toFixed(1) : Math.round(k)) + ' км';
 const fmtT = t => { const r = Math.round(t); return (r < 0 ? '−' : r > 0 ? '+' : '') + Math.abs(r) + '°'; };
 const qty = q => Number.isInteger(q) ? q : q.toFixed(1);
-let scr = 'map', sel = null, pick = null, invCat = 'all', craftG = null, rsel = null, tradeTab = 'buy', confirmNew = false, showF = true, hudT = 0;
+let hudOpen = false, impOpen = false, scr = 'map', sel = null, pick = null, invCat = 'all', craftG = null, rsel = null, tradeTab = 'buy', confirmNew = false, showF = true, hudT = 0;
 
 function toast(m, k) { if (!m) return; const el = document.createElement('div'); el.className = 'toast ' + (k || ''); el.textContent = m; const box = $('#toasts'); box.appendChild(el); while (box.children.length > 3) box.firstChild.remove(); setTimeout(() => el.classList.add('out'), 2600); setTimeout(() => el.remove(), 3100); }
 const modalOpen = () => !$('#modal').hidden;
@@ -35,7 +35,8 @@ function renderHud() {
   $('#clock').innerHTML = `<span>День ${dayNum()} · ${dateStr()}</span><span>${pad(Math.floor(h))}:${pad(Math.floor(h % 1 * 60))}</span><span class="cold">${fmtT(tempAt(g.pos.x, g.pos.y))}</span><span class="dim">${WEATHER[g.weather].n}</span>`;
   const rows = [['cross', 'Здоровье', 'var(--blood)', s.hp, s.hp < 30], ['fork', 'Сытость', 'var(--lamp)', s.hunger, s.hunger < 20], ['drop', 'Вода', 'var(--frost)', s.thirst, s.thirst < 20], ['thermo', 'Тепло', 'var(--ember)', s.warmth, s.warmth < 25], ['rad', 'Радиация', 'var(--ash)', s.rad, s.rad >= 30], ['face', 'Настрой', 'var(--soft)', s.mood, s.mood < 25]];
   const UK = { cross: 'u:hp', fork: 'u:food', drop: 'u:water', thermo: 'u:warm', rad: 'u:rad', face: 'u:mood' };
-  $('#stats').innerHTML = rows.map(r => `<div class="need${r[4] ? ' crit' : ''}" title="${r[1]}"><span class="ni" style="color:${r[2]}">${art(UK[r[0]]) || uiIcon(r[0])}</span><b>${Math.round(r[3])}</b><i class="nb"><i style="width:${clamp(r[3], 0, 100)}%;background:${r[2]}"></i></i></div>`).join('');
+  const shown = rows.filter((r, i) => i < 3 || hudOpen || r[4] || (i === 3 && s.warmth < 45) || (i === 4 && s.rad > 8) || (i === 5 && s.mood < 35));
+  $('#stats').innerHTML = shown.map(r => `<div class="need${r[4] ? ' crit' : ''}" title="${r[1]}"><span class="ni" style="color:${r[2]}">${art(UK[r[0]]) || uiIcon(r[0])}</span><b>${Math.round(r[3])}</b><i class="nb"><i style="width:${clamp(r[3], 0, 100)}%;background:${r[2]}"></i></i></div>`).join('') + (shown.length < 6 ? '<span class="more">ещё</span>' : '');
   const c = [];
   if (g.wounds.some(w => w.bl > 0 && !w.b)) c.push(['bad', 'Кровотечение']);
   if (g.wounds.length) c.push(['', 'Раны: ' + g.wounds.length]);
@@ -53,9 +54,12 @@ function renderRoute() {
   const el = $('#route');
   if (trip) { el.hidden = false; el.innerHTML = `<div class="rt"><div class="eyebrow">В пути · ${moveMode().by}</div><div class="rname">${sel && sel.n ? esc(sel.n) : 'Точка на карте'}</div><div class="mono" id="tripInfo">&nbsp;</div><div class="hp"><i id="tripBar" style="width:0%"></i></div></div><button class="btn row" data-act="stop">Стоп</button>`; return; }
   if (!sel || scr !== 'map') { el.hidden = true; el.innerHTML = ''; return; }
-  const r = routeInfo(sel.x, sel.y), warn = r.m.blocked || (r.cut ? 'Дальше вода: дойдёшь только до берега.' : r.fuel > (g.inv.fuel || 0) + .01 ? 'Бензина на весь путь не хватит.' : '');
+  const r = sel.plan = planRoute(sel.x, sel.y), legs = r.m.id === 'foot' || r.m.id === 'bike';
+  const warn = r.blocked || (r.cut ? 'Дальше вода: дойдёшь только до берега.' : r.fuel > (g.inv.fuel || 0) + .01 ? `Бензина не хватит: нужно ${r.fuel.toFixed(1)} л, есть ${qty(g.inv.fuel || 0)}.` : '');
+  const bits = [fmtKm(r.km), fmtH(r.h) + ' ' + r.m.by]; if (r.kmRoad > 1) bits.push('по дороге ' + fmtKm(r.kmRoad)); if (r.fords) bits.push('бродов: ' + r.fords); if (r.fuel) bits.push('бензин ' + r.fuel.toFixed(1) + ' л');
+  const need = `В пути уйдёт примерно: сытость −${Math.round(2 * (legs ? 1.3 : 1) * r.h)}, вода −${Math.round(2.9 * (legs ? 1.3 : 1) * r.h)}.${r.fords ? ' Брод: промокнешь и замёрзнешь.' : ''}`;
   el.hidden = false;
-  el.innerHTML = `<div class="rt"><div class="eyebrow">Маршрут</div><div class="rname">${sel.n ? esc(sel.n) : 'Точка на карте'}</div><div class="mono">${fmtKm(r.km)} · ${fmtH(r.h)} ${r.m.by}${r.fuel ? ` · ${r.fuel.toFixed(1)} л` : ''}</div>${warn ? `<div class="ef bad">${warn}</div>` : ''}</div><button class="btn row primary" data-act="go">В путь</button><button class="btn row" data-act="unsel" aria-label="Сбросить маршрут">✕</button>`;
+  el.innerHTML = `<div class="rt"><div class="eyebrow">Маршрут</div><div class="rname">${sel.n ? esc(sel.n) : 'Точка на карте'}</div><div class="mono">${bits.join(' · ')}</div><div class="ef${warn ? ' bad' : ''}">${warn || need}</div></div><button class="btn row primary" data-act="go"${r.blocked ? ' disabled' : ''}>В путь</button><button class="btn row" data-act="unsel" aria-label="Сбросить маршрут">✕</button>`;
 }
 
 /* ---------- экран «Место» ---------- */
@@ -199,6 +203,7 @@ function renderWorld() {
     + `<p class="desc">Торговля поднимает отношение, убийство людей фракции — роняет. От банды можно откупиться талонами прямо в стычке. Торговец сидит в «Фактории» внутри города-базы.</p><button class="sbtn" data-act="togf">${showF ? 'Скрыть территории на карте' : 'Показать территории на карте'}</button></div>`;
   h += `<div><h3>Итоги</h3><div class="kv"><span>Дней в пути</span><b class="mono">${dayNum()}</b><span>Пройдено</span><b class="mono">${fmtKm(g.stats.km)}</b><span>Побед</span><b class="mono">${g.stats.kills}</b><span>Обысков</span><b class="mono">${g.stats.searched}</b></div></div>`;
   h += '<div><h3>Журнал</h3><ul class="log">' + g.log.slice().reverse().map(e => { const a = e.t + 8; return `<li class="${e.k}"><time>д${Math.floor(a / 24) + 1} ${pad(Math.floor(a % 24))}:${pad(Math.floor(a % 1 * 60))}</time><span>${esc(e.m)}</span></li>`; }).join('') + '</ul></div>';
+  h += `<div><h3>Сохранение</h3><p class="desc">Игра сохраняется сама, плюс раз в пару минут делается резервная копия. Сохранение можно перенести текстом на другое устройство.</p><div class="chips flat"><button class="sbtn" data-act="exp">Скопировать сохранение</button><button class="sbtn" data-act="impopen">Загрузить из текста</button></div>${impOpen ? '<textarea id="impTxt" class="imp" rows="4" placeholder="Вставь сюда текст сохранения"></textarea><button class="sbtn hot" data-act="imp">Загрузить</button>' : ''}</div>`;
   h += confirmNew ? '<div class="rbt"><button class="btn row" data-act="newyes">Да, начать заново</button><button class="btn row" data-act="newno">Отмена</button></div>' : '<button class="sbtn ghost" data-act="newgame">Новая игра</button>';
   return h;
 }
@@ -270,8 +275,9 @@ function showOver() { const o = g.over; $('#modal').dataset.kind = 'over'; showM
 /* ---------- действия ---------- */
 function focusCity() { const c = curHere.city; if (c && cw) { cam.follow = false; cam.x = c.x; cam.y = c.y; cam.z = clamp(Math.min(cw, ch) * .96 / (2 * c.r), 2, ZMAX); } else { cam.follow = true; if (cam.z < 2) cam.z = 6; } }
 function fresh() { hideModal(); newGame(); sel = null; pick = null; stn = null; perkSnooze = 0; scr = 'map'; confirmNew = false; cam.x = g.pos.x; cam.y = g.pos.y; focusCity(); save(); render(); }
-const FREE = { scr: 1, cat: 1, stn: 1, rsel: 1, 'q-': 1, 'q+': 1, pickinv: 1, pickeq: 1, use: 1, equip: 1, unequip: 1, togf: 1, newgame: 1, newno: 1 };
+const FREE = { exp: 1, impopen: 1, scr: 1, cat: 1, stn: 1, rsel: 1, 'q-': 1, 'q+': 1, pickinv: 1, pickeq: 1, use: 1, equip: 1, unequip: 1, togf: 1, newgame: 1, newno: 1 };
 function act(a, arg) {
+  if (a === 'hud') { hudOpen = !hudOpen; return renderHud(); }
   if (a === 'zin' || a === 'zout') { cam.z = clamp(cam.z * (a === 'zin' ? 1.6 : 1 / 1.6), zMin(), ZMAX); return; }
   if (a === 'center') { focusCity(); return; }
   if (a === 'newyes') return fresh();
@@ -303,6 +309,9 @@ function act(a, arg) {
     case 'treat': { const p = arg.split(':'); actTreat(+p[0], p[1]); break; }
     case 'craft': actCraft(arg, rqty); rqty = 1; break;
     case 'togf': showF = !showF; renderSheet(true); break;
+    case 'exp': { const t = JSON.stringify(g), fail = () => { impOpen = true; renderSheet(true); const ta = $('#impTxt'); if (ta) { ta.value = t; ta.select(); } toast('Выдели и скопируй текст вручную', ''); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(() => toast('Сохранение скопировано', 'good'), fail); else fail(); break; }
+    case 'impopen': impOpen = !impOpen; renderSheet(true); break;
+    case 'imp': { const ta = $('#impTxt'); if (ta && importSave(ta.value.trim())) { impOpen = false; sel = null; scr = 'map'; focusCity(); render(); toast('Сохранение загружено', 'good'); } else toast('Не похоже на сохранение этой игры', 'bad'); break; }
     case 'newgame': confirmNew = true; renderSheet(true); break; case 'newno': confirmNew = false; renderSheet(true); break;
   }
 }
@@ -371,7 +380,7 @@ function draw() {
   }
   // дороги между городами
   const dw = clamp(z * 2.2, 1.4, 8);
-  cx.strokeStyle = 'rgba(58,48,36,.75)'; cx.lineWidth = dw + 1.6; cx.beginPath(); for (const r of D.ROADS) { const a = S2(r[0].x, r[0].y), b = S2(r[1].x, r[1].y); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); } cx.stroke();
+  cx.strokeStyle = 'rgba(58,48,36,.75)'; cx.lineWidth = dw + 1.6; cx.beginPath(); for (const r of D.ROADS) { for (let i = 0; i < r.pts.length; i++) { const q = S2(r.pts[i].x, r.pts[i].y); if (i) cx.lineTo(q[0], q[1]); else cx.moveTo(q[0], q[1]); } } cx.stroke();
   cx.strokeStyle = '#b9a67c'; cx.lineWidth = dw; cx.stroke();
   // заражение
   for (const q of ZONES) { const [sx, sy] = S2(q.x, q.y), r = q.r * z; if (sx + r < 0 || sy + r < 0 || sx - r > cw || sy - r > ch) continue; const gr = cx.createRadialGradient(sx, sy, 0, sx, sy, r); gr.addColorStop(0, `rgba(214,190,40,${.16 + q.lvl * .07})`); gr.addColorStop(1, 'rgba(214,190,40,.05)'); cx.fillStyle = gr; cx.beginPath(); cx.arc(sx, sy, r, 0, 7); cx.fill(); cx.setLineDash([5, 5]); cx.strokeStyle = 'rgba(232,206,60,.85)'; cx.lineWidth = 1.5; cx.stroke(); cx.setLineDash([]); }
@@ -414,7 +423,7 @@ function draw() {
   const dk = (1 - clamp(Math.sin((hour() - 6) / 15 * Math.PI), 0, 1)) * .45; if (dk > .01) { cx.fillStyle = `rgba(10,16,40,${dk})`; cx.fillRect(0, 0, cw, ch); }
   // маршрут, костёр, транспорт, игрок
   const P = S2(g.pos.x, g.pos.y);
-  if (sel) { const e = trip ? { x: trip.tx, y: trip.ty } : clipRoute(g.pos.x, g.pos.y, sel.x, sel.y), E = S2(e.x, e.y); cx.beginPath(); cx.moveTo(P[0], P[1]); cx.lineTo(E[0], E[1]); cx.setLineDash([7, 5]); cx.strokeStyle = PAPER; cx.lineWidth = 4.5; cx.stroke(); cx.strokeStyle = REDP; cx.lineWidth = 2.4; cx.stroke(); cx.setLineDash([]); cx.beginPath(); cx.moveTo(E[0] - 5, E[1] - 5); cx.lineTo(E[0] + 5, E[1] + 5); cx.moveTo(E[0] + 5, E[1] - 5); cx.lineTo(E[0] - 5, E[1] + 5); cx.stroke(); }
+  if (sel || trip) { const rp = []; if (trip) for (let i = trip.i; i < trip.segs.length; i++) rp.push(trip.segs[i].bx, trip.segs[i].by); else { const pl = sel.plan || (sel.plan = planRoute(sel.x, sel.y)); for (const l of pl.legs) for (const q of l.pts) rp.push(q.x, q.y); } let E = P; cx.beginPath(); cx.moveTo(P[0], P[1]); for (let i = 0; i < rp.length; i += 2) { E = S2(rp[i], rp[i + 1]); cx.lineTo(E[0], E[1]); } cx.setLineDash([7, 5]); cx.strokeStyle = PAPER; cx.lineWidth = 4.5; cx.stroke(); cx.strokeStyle = REDP; cx.lineWidth = 2.4; cx.stroke(); cx.setLineDash([]); cx.beginPath(); cx.moveTo(E[0] - 5, E[1] - 5); cx.lineTo(E[0] + 5, E[1] + 5); cx.moveTo(E[0] + 5, E[1] - 5); cx.lineTo(E[0] - 5, E[1] + 5); cx.stroke(); }
   if (g.fire && g.time < g.fire.until) { const [sx, sy] = S2(g.fire.x, g.fire.y); if (!drawArt(cx, 's:fire', sx + 16, sy - 14, 26)) { cx.fillStyle = '#e07a2c'; cx.beginPath(); cx.arc(sx + 11, sy - 11, 3.5, 0, 7); cx.fill(); } }
   if (g.veh && g.veh.parked) { const [sx, sy] = S2(g.veh.parked.x, g.veh.parked.y); if (!drawArt(cx, 'v:' + g.veh.t, sx, sy, 34)) box(sx, sy, 18, PAPER, '#2f6f9f', 2); }
   const pr = RM ? 13 : 12 + Math.sin(performance.now() / 420) * 3; cx.beginPath(); cx.arc(P[0], P[1], pr, 0, 7); cx.strokeStyle = 'rgba(244,238,220,.9)'; cx.lineWidth = 2; cx.stroke();
@@ -425,13 +434,15 @@ function draw() {
 }
 function tapAt(sx, sy) {
   if (trip || g.over || g.combat || modalOpen()) return;
-  const z = cam.z, wx = cam.x + (sx - vcx) / z, wy = cam.y + (sy - vcy) / z, tol = 16 / z;
+  const z = cam.z, wx = cam.x + (sx - vcx) / z, wy = cam.y + (sy - vcy) / z, tol = 22 / z;
   let best = null, bd = 1e9;
   const city = CITIES.find(c => hyp(c.x - wx, c.y - wy) <= Math.max(c.r, tol));
   if (city) { const fine = city.r * z > 44, tl = Math.max(tol, city.grid.s * .75); for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tl : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
   if (!best) for (const p of POIS) { if (!g.found[p.id]) continue; const d = hyp(p.x - wx, p.y - wy); if (d <= Math.max(2, tol) && d < bd) { bd = d; best = { x: p.x, y: p.y, n: p.n, id: p.id }; } }
   if (!best) { if (isWater(wx, wy)) return toast('Там вода.', ''); best = { x: wx, y: wy, n: city ? 'Улицы, ' + city.n : null }; }
-  sel = best; scr = 'map'; if (startTrip(sel.x, sel.y)) cam.follow = !(curHere.city && hyp(sel.x - curHere.city.x, sel.y - curHere.city.y) <= curHere.city.r); else sel = null;
+  sel = best; scr = 'map'; const pl = sel.plan = planRoute(sel.x, sel.y);
+  if (!pl.blocked && pl.h <= 3) { if (startTrip(sel.x, sel.y)) cam.follow = !(curHere.city && hyp(sel.x - curHere.city.x, sel.y - curHere.city.y) <= curHere.city.r); else sel = null; }
+  else if (pl.blocked) toast(pl.blocked, 'bad');
   renderNav(); renderSheet(false); renderRoute();
 }
 const ptrs = new Map(); let drag = null, pinch = null;
@@ -453,7 +464,7 @@ function frame(now) {
   if (!g || !cw) return;
   if (trip) {
     tripStep(dt);
-    if (trip) { hudT += dt; if (hudT > .2) { hudT = 0; renderHud(); const left = hyp(trip.tx - g.pos.x, trip.ty - g.pos.y), ti = $('#tripInfo'), tb = $('#tripBar'); if (ti) ti.textContent = `осталось ${fmtKm(left)} · ${fmtH(left / moveMode().sp)}`; if (tb) tb.style.width = clamp((1 - left / trip.total) * 100, 0, 100) + '%'; } }
+    if (trip) { hudT += dt; if (hudT > .2) { hudT = 0; renderHud(); const left = trip.left, ti = $('#tripInfo'), tb = $('#tripBar'); if (ti) ti.textContent = `осталось ${fmtKm(left)}${trip.segs[trip.i].road ? ' · по дороге' : ' · без дороги'}`; if (tb) tb.style.width = clamp((1 - left / trip.total) * 100, 0, 100) + '%'; } }
   }
   const vc = viewCenter(), k = RM ? 1 : .18; vcx += (vc[0] - vcx) * k; vcy += (vc[1] - vcy) * k;
   if (cam.follow) { const q = RM ? 1 : .12; cam.x += (g.pos.x - cam.x) * q; cam.y += (g.pos.y - cam.y) * q; }

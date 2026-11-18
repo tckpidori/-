@@ -97,8 +97,11 @@ function newGame() {
   log('Обыскивай здания, ищи воду и тёплую одежду. Приблизь карту — внутри города видны отдельные дома. Заштрихованные пятна — заражённые земли.');
   return g;
 }
-function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(g)); } catch (e) { /* хранилище недоступно */ } }
-function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const o = JSON.parse(s); if (o && o.v === 5 && o.pos && o.ground && o.st) return o; } } catch (e) { /* нет сохранения */ } return null; }
+let bakT = 0;
+function save() { try { const old = localStorage.getItem(SAVE_KEY); if (old && Date.now() - bakT > 120000) { localStorage.setItem(SAVE_KEY + '-bak', old); bakT = Date.now(); } localStorage.setItem(SAVE_KEY, JSON.stringify(g)); } catch (e) { /* хранилище недоступно */ } }
+const validSave = o => !!(o && o.v === 5 && o.pos && o.ground && o.st && o.s && o.inv && o.eq && o.sites);
+function load() { for (const k of [SAVE_KEY, SAVE_KEY + '-bak']) { try { const s = localStorage.getItem(k); if (s) { const o = JSON.parse(s); if (validSave(o)) return o; } } catch (e) { /* пробуем резервную копию */ } } return null; }
+function importSave(txt) { try { const o = JSON.parse(txt); if (!validSave(o)) return false; g = o; g.combat = null; trip = null; locate(); discover(); save(); return true; } catch (e) { return false; } }
 
 /* ---------- навыки ---------- */
 const xpNeed = l => 20 * (l + 1);
@@ -334,26 +337,66 @@ function clipRoute(x0, y0, x1, y1) {
   for (let i = 1; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; if (isWater(x, y)) { run += d / n; if (run > (frozen ? 220 : 40)) return { x: lx, y: ly, cut: true }; } else { run = 0; lx = x; ly = y; } }
   return { x: lx, y: ly, cut: isWater(x1, y1) };
 }
-function routeInfo(tx, ty) { const e = clipRoute(g.pos.x, g.pos.y, tx, ty), km = hyp(e.x - g.pos.x, e.y - g.pos.y), m = moveMode(); return { x: e.x, y: e.y, cut: e.cut, km, m, h: km / m.sp, fuel: km * m.fuel }; }
+/* Дороги: граф между городами, трассы слегка изогнуты. Расстояния — по реальной географии. */
+function geoKm(x0, y0, x1, y1) { const a = unproj(x0, y0), b = unproj(x1, y1), r = Math.PI / 180, dl = (b[1] - a[1]) * r, dn = (b[0] - a[0]) * r, s = Math.sin(dl / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dn / 2) ** 2; return 12742 * Math.asin(Math.sqrt(s)); }
+const RADJ = {}, OFFMUL = { foot: 1, bike: .7, moto: .5, car: .35 }, ROADMUL = { foot: 1.15, bike: 1.3, moto: 1, car: 1 };
+for (const r of D.ROADS) {
+  const a = r[0], b = r[1], dx = b.x - a.x, dy = b.y - a.y, k = (hash2(Math.round(a.x), Math.round(b.y)) - .5) * .22; let mx = (a.x + b.x) / 2 - dy * k, my = (a.y + b.y) / 2 + dx * k; if (isWater(mx, my)) { mx = (a.x + b.x) / 2; my = (a.y + b.y) / 2; }
+  const pts = []; for (let i = 0; i <= 8; i++) { const t = i / 8, u = 1 - t; pts.push({ x: u * u * a.x + 2 * u * t * mx + t * t * b.x, y: u * u * a.y + 2 * u * t * my + t * t * b.y }); }
+  let km = 0; for (let i = 1; i < pts.length; i++) km += geoKm(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
+  r.pts = pts; r.km = km; (RADJ[a.n] || (RADJ[a.n] = [])).push({ to: b, r, rev: 0 }); (RADJ[b.n] || (RADJ[b.n] = [])).push({ to: a, r, rev: 1 });
+}
+function segX(a, b, c, d) { const d1 = (b.x - a.x) * (c[1] - a.y) - (b.y - a.y) * (c[0] - a.x), d2 = (b.x - a.x) * (d[1] - a.y) - (b.y - a.y) * (d[0] - a.x), d3 = (d[0] - c[0]) * (a.y - c[1]) - (d[1] - c[1]) * (a.x - c[0]), d4 = (d[0] - c[0]) * (b.y - c[1]) - (d[1] - c[1]) * (b.x - c[0]); return d1 * d2 < 0 && d3 * d4 < 0; }
+function riverCross(a, b) { let n = 0; for (const r of RIVERS) for (let i = 1; i < r.length; i++) if (segX(a, b, r[i - 1], r[i])) n++; return n; }
+function nearCity(x, y, lim) { let b = null, bd = lim; for (const c of CITIES) { const d = hyp(c.x - x, c.y - y); if (d < bd) { bd = d; b = c; } } return b; }
+function roadPath(a, b) {
+  const dist = {}, prev = {}, fin = {}, q = [a.n]; dist[a.n] = 0;
+  while (q.length) { let bi = 0; for (let i = 1; i < q.length; i++) if (dist[q[i]] < dist[q[bi]]) bi = i; const u = q.splice(bi, 1)[0]; if (fin[u]) continue; fin[u] = 1; if (u === b.n) break; for (const e of RADJ[u] || []) { const nd = dist[u] + e.r.km; if (dist[e.to.n] == null || nd < dist[e.to.n]) { dist[e.to.n] = nd; prev[e.to.n] = [u, e]; q.push(e.to.n); } } }
+  if (dist[b.n] == null) return null; const legs = []; let cur = b.n; while (cur !== a.n) { const p = prev[cur]; legs.unshift(p[1]); cur = p[0]; } return legs;
+}
+function planRoute(tx, ty) {
+  const m = moveMode(), P = g.pos, frozen = seasonT(P.x, P.y) < -6, veh = m.id !== 'foot';
+  const off = (a, b, free) => { const e = clipRoute(a.x, a.y, b.x, b.y), km = geoKm(a.x, a.y, e.x, e.y), fords = free || frozen ? 0 : riverCross(a, e); return { pts: [{ x: e.x, y: e.y }], km, h: km / (m.sp * OFFMUL[m.id]) + fords * 2.5, fuel: km * m.fuel * 1.5, fords, cut: e.cut, road: 0, blocked: veh && fords ? 'Река на пути: на транспорте только по мосту. Иди по дороге или оставь транспорт.' : null }; };
+  const sum = legs => { const o = { legs, km: 0, h: 0, fuel: 0, fords: 0, kmRoad: 0, cut: legs[legs.length - 1].cut, blocked: null }; for (const l of legs) { o.km += l.km; o.h += l.h; o.fuel += l.fuel; o.fords += l.fords; if (l.road) o.kmRoad += l.km; if (l.blocked) o.blocked = l.blocked; } return o; };
+  let best = sum([off(P, { x: tx, y: ty })]);
+  const A = curHere.city || nearCity(P.x, P.y, 150), B = nearCity(tx, ty, 150);
+  if (A && B && A !== B) {
+    const rp = roadPath(A, B);
+    if (rp) {
+      const legs = [], l0 = off(P, A, hyp(P.x - A.x, P.y - A.y) < A.r + 5); if (l0.km > .2) legs.push(l0);
+      for (const e of rp) legs.push({ pts: (e.rev ? e.r.pts.slice().reverse() : e.r.pts).slice(1), km: e.r.km, h: e.r.km / (m.sp * ROADMUL[m.id]), fuel: e.r.km * m.fuel, fords: 0, road: 1 });
+      const l1 = off(B, { x: tx, y: ty }, hyp(tx - B.x, ty - B.y) < B.r + 5); if (l1.km > .2) legs.push(l1);
+      const via = sum(legs); if (!via.blocked && (best.blocked || via.h < best.h)) best = via;
+    }
+  }
+  best.m = m; if (m.blocked) best.blocked = m.blocked; return best;
+}
+const routeInfo = planRoute;
 function startTrip(tx, ty) {
-  const r = routeInfo(tx, ty);
+  const r = planRoute(tx, ty);
   if (r.km < .05) { UIH.toast(r.cut ? 'Туда не пройти: вода.' : 'Ты уже здесь.', ''); return false; }
-  if (r.m.blocked) { UIH.toast(r.m.blocked, 'bad'); return false; }
-  trip = { tx: r.x, ty: r.y, total: r.km, rate: r.h / clamp(r.h * .4, 1.2, 16), saveT: 0 };
+  if (r.blocked) { UIH.toast(r.blocked, 'bad'); return false; }
+  const segs = []; let p = { x: g.pos.x, y: g.pos.y }, total = 0;
+  for (const l of r.legs) { let first = true; for (const q of l.pts) { const km = geoKm(p.x, p.y, q.x, q.y); if (km > 1e-4) { segs.push({ ax: p.x, ay: p.y, bx: q.x, by: q.y, km, road: l.road, ford: first ? l.fords : 0 }); total += km; first = false; } p = q; } }
+  if (!segs.length) return false;
+  trip = { segs, i: 0, t: 0, total, left: total, tx: p.x, ty: p.y, rate: r.h / clamp(r.h * .4, 1.2, 16), saveT: 0 };
   return true;
 }
 function stopTrip(msg) { trip = null; if (msg) { log(msg); UIH.toast(msg, ''); } UIH.tripEnd(false); done(); }
 function tripStep(realDt) {
   if (!trip || g.over || g.combat) return;
   const m = moveMode(); if (m.blocked) return stopTrip(m.blocked);
-  let dtH = trip.rate * Math.min(realDt, .1), dist = m.sp * dtH; const rem = hyp(trip.tx - g.pos.x, trip.ty - g.pos.y);
-  if (dist >= rem) { dist = rem; dtH = rem / m.sp; }
-  if (m.fuel) { const need = dist * m.fuel; if (!has('fuel', need)) return stopTrip('Бензин кончился.'); take('fuel', need); }
-  if (rem > 1e-6) { g.pos.x += (trip.tx - g.pos.x) / rem * dist; g.pos.y += (trip.ty - g.pos.y) / rem * dist; }
+  const sg = trip.segs[trip.i];
+  if (sg.ford && !sg.fd) { sg.fd = 1; pass(2.5 * sg.ford, { move: 'foot' }); g.s.warmth = Math.max(0, g.s.warmth - 25 * sg.ford); log('Переправа через реку вброд: промок и потерял время.', 'bad'); UIH.toast('Переправа вброд: промок', 'bad'); if (g.over) { trip = null; return done(); } }
+  const sp = m.sp * (sg.road ? ROADMUL[m.id] : OFFMUL[m.id]); let dtH = trip.rate * Math.min(realDt, .1), dist = sp * dtH; const rem = sg.km * (1 - trip.t);
+  if (dist >= rem) { dist = rem; dtH = rem / sp; }
+  if (m.fuel) { const need = dist * m.fuel * (sg.road ? 1 : 1.5); if (!has('fuel', need)) return stopTrip('Бензин кончился.'); take('fuel', need); }
+  trip.t = sg.km > 0 ? Math.min(1, trip.t + dist / sg.km) : 1; if (trip.t > 1 - 1e-6) trip.t = 1;
+  g.pos.x = sg.ax + (sg.bx - sg.ax) * trip.t; g.pos.y = sg.ay + (sg.by - sg.ay) * trip.t; trip.left = Math.max(0, trip.left - dist);
   g.stats.km += dist; locate(); discover(); step(dtH, { move: m.id });
   if (g.over) { trip = null; return done(); }
   if (warnCheck()) return stopTrip('');
-  if (rem - dist < .02) { trip = null; if (curHere.site) log(`Прибыл: ${curHere.site.n}${curHere.city ? ', ' + curHere.city.n : ''}.`); UIH.tripEnd(true); return done(); }
+  if (trip.t >= 1) { trip.i++; trip.t = 0; if (trip.i >= trip.segs.length) { trip = null; if (curHere.site) log(`Прибыл: ${curHere.site.n}${curHere.city ? ', ' + curHere.city.n : ''}.`); UIH.tripEnd(true); return done(); } }
   let er = (m.id === 'moto' || m.id === 'car') ? .012 : .03; if (isNight()) er *= 1.5; if (radAt(g.pos.x, g.pos.y) > .2) er *= 1.4; const f = factionAt(g.pos.x, g.pos.y); if (f && hostile(f)) er *= 2; if (friendlyCity()) er *= .3;
   if (!isWater(g.pos.x, g.pos.y) && chance(er * dtH)) { const enc = makeEncounter(curHere.city ? 'city' : 'wild'); trip = null; UIH.tripEnd(false); return startCombat(enc, {}, () => done()); }
   if (chance(.006 * dtH)) { const r = pickW(BUILD.camp.loot), got = {}; got[r[0]] = 1; add(r[0], 1); log('Находка у дороги: ' + fmtGot(got) + '.', 'good'); UIH.toast('Находка: ' + fmtGot(got), 'good'); }

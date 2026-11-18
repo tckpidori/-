@@ -389,10 +389,13 @@ h2.loc{font-size:19px}
   .heroimg{min-height:100px}
 }
 .emb{display:inline-block;width:26px;height:26px;vertical-align:middle;margin-right:8px}
+#stats{cursor:pointer}
+.more{font:500 10px var(--f-disp);letter-spacing:.1em;text-transform:uppercase;color:#9a9278;align-self:center;border:1px solid #4a4734;border-radius:3px;padding:1px 6px}
+.imp{width:100%;margin:8px 0;background:#efe6cc;border:1px solid #7f704f;border-radius:5px;padding:8px;font:12px var(--f-mono);color:#2a241a}
 </style>
 
 <div id="app">
-  <header id="top"><div id="stats"></div><div id="clock"></div></header>
+  <header id="top"><div id="stats" data-act="hud" role="button" tabindex="0" aria-label="Показатели: нажми, чтобы раскрыть все"></div><div id="clock"></div></header>
   <main id="stage">
     <canvas id="map" aria-label="Карта: нажми на точку или здание, чтобы проложить маршрут"></canvas>
     <div id="cond"></div>
