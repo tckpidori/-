@@ -70,7 +70,7 @@ function renderPlace() {
     + (fire ? `<span class="chip warm">Костёр · ещё ${fmtH(g.fire.until - g.time)}</span>` : '')
     + (rad > 0 ? `<span class="chip ash">Заражение: ${owns('geiger') ? (rad * 3.2 * (1 - radProt())).toFixed(1) + ' в час' : rad > 2 ? 'смертельное' : rad > 1 ? 'сильное' : 'слабое'}</span>` : '')
     + (f ? `<span class="chip" style="border-color:${FACTIONS[f].c};color:${FACTIONS[f].c}">${FACTIONS[f].n} · ${repWord(f)}</span>` : '')
-    + (fresh ? '<span class="chip cold">Вода рядом</span>' : '') + (snowHere() ? '<span class="chip">Снег</span>' : '') + '</div></div>';
+    + (fresh ? '<span class="chip cold">Вода рядом</span>' : '') + (snowHere() ? '<span class="chip">Снег</span>' : '') + (site && site.t !== 'base' ? (has('flashlight') ? '<span class="chip warm">Фонарик: находок больше</span>' : has('torch') ? '<span class="chip warm">Факел: находок больше</span>' : '<span class="chip">Темно: нужен свет</span>') : '') + '</div></div>';
   const mk = [...new Set(encPool(encCtx()).map(p => p[0]))], meetH = `<div class="grid small">${mk.map(k => cell(art('e:' + k) || uiIcon('person', '#8797a3'), ENEMIES[k].n)).join('')}</div>`, A = [];
   let finds = '', note = '';
   if (site && site.t === 'base') {
@@ -217,25 +217,40 @@ function render() {
 }
 
 /* ---------- бой, торговля, конец ---------- */
+const TER1 = ['x:wcar', 't:taiga', 'x:rad'];
 function renderCombat() {
   const c = g.combat; if (!c) return;
-  if (!c.en[c.tgt] || c.en[c.tgt].hp <= 0) c.tgt = c.en.findIndex(x => x.hp > 0);
-  const t = c.en[c.tgt], mk = g.eq.melee, mw = mk ? ITEMS[mk] : { n: 'Кулаки', reach: 2 }, rk = g.eq.ranged, rw = rk ? ITEMS[rk] : null, am = rw ? (g.inv[rw.ammo] || 0) : 0;
-  const canHeal = (g.wounds.some(w => w.bl > 0 && !w.b) && (has('bandage') || has('ragband'))) || has('medkit'), gang = c.f && FACTIONS[c.f].gang;
+  const me = c.un[0], mw = cWeapon('melee'), rw = cWeapon('ranged'), w = (c.mode === 'ranged' && rw) || mw, ranged = !!w.acc, reach = c.moved ? {} : cReach(c, me, cSteps()), foes = cFoes(c);
+  let grid = '';
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+    const t = c.cells[y][x], u = cUnitAt(c, x, y); let cls = 'bc t' + t, inner = '';
+    if (t === 1) inner += `<span class="ter">${art(TER1[(x * 3 + y) % 3])}</span>`; else if (t === 2) inner += `<span class="ter">${art('t:steppe')}</span>`; else if (t === 3) inner += `<span class="ter">${art('t:desert')}</span>`; else if (t === 4) inner += '<span class="tm bad">✕</span>'; else if (t === 5) inner += '<span class="tm">⇲</span>';
+    if (u && u.me) inner += `<span class="un me">${uiIcon('person', '#1b1206')}</span>`;
+    else if (u) { if (cCanHit(c, me, u, w.r, ranged)) cls += ' tg'; inner += `<span class="un foe">${art('e:' + u.k) || uiIcon('person', '#fff')}</span><span class="uh"><i style="width:${clamp(u.hp / u.max * 100, 0, 100)}%"></i></span>`; }
+    else if (reach[x + ',' + y]) cls += ' mv';
+    grid += `<button class="${cls}" data-act="cb" data-arg="cell:${x},${y}">${inner}</button>`;
+  }
+  const wb = (m, ww) => ww ? btn('cb', ww.n, `урон ${ww.dmg[0]}–${ww.dmg[1]} · ${ww.ap} ОД · дальность ${ww.r}${ww.ammo ? ' · патронов ' + (g.inv[ww.ammo] || 0) : ''}`, ww.ammo && !has(ww.ammo), c.mode === m || (m === 'melee' && !rw) ? 'sel' : '', 'mode:' + m) : '';
+  const canHeal = (g.wounds.some(x => x.bl > 0 && !x.b) && (has('bandage') || has('ragband'))) || has('medkit'), gang = c.f && FACTIONS[c.f].gang, onExit = c.cells[me.y][me.x] === 5, onT = c.cells[me.y][me.x];
   $('#modal').dataset.kind = 'combat';
-  showModal(`<div class="card"><div class="eyebrow">Стычка${c.f ? ' · ' + FACTIONS[c.f].n : ''}</div>
-    <div class="foes">${c.en.map((x, i) => { const e = ENEMIES[x.k]; return `<button class="foe${i === c.tgt ? ' on' : ''}${x.hp <= 0 ? ' dead' : ''}" data-act="cb" data-arg="tgt:${i}"${x.hp <= 0 ? ' disabled' : ''}><span class="fp">${art('e:' + x.k)}</span><span class="fn">${e.n}</span><span class="mono">${x.hp > 0 ? Math.round(x.d) + ' м' : 'убит'}</span><span class="hp"><i style="width:${clamp(x.hp / e.hp * 100, 0, 100)}%"></i></span></button>`; }).join('')}</div>
-    <div class="hpline"><span>Ты</span><span class="mono">${Math.max(0, Math.round(g.s.hp))} / ${maxHp()}</span></div><div class="hp you"><i style="width:${clamp(g.s.hp, 0, 100)}%"></i></div>
-    <ul class="clog">${c.log.slice(-5).map(m => `<li>${esc(m)}</li>`).join('')}</ul>
-    <div class="cbtns">
-      ${btn('cb', mw.n, t.d > mw.reach ? 'далеко' : Math.round(playerAcc(mw, t.d) * 100) + '%', false, t.d <= mw.reach ? 'primary' : '', 'melee')}
-      ${btn('cb', rw ? rw.n : 'Нет ствола', rw ? (am ? `${Math.round(playerAcc(rw, t.d) * 100)}% · патронов ${am}` : 'нет патронов') : '', !rw || !am, rw && am && t.d > mw.reach ? 'primary' : '', 'ranged')}
-      ${btn('cb', 'Сблизиться', '−8 м', false, '', 'near')}
-      ${btn('cb', 'Отойти', '+5 м', false, '', 'far')}
-      ${btn('cb', 'Лечиться', canHeal ? 'бинт или аптечка' : 'нечем', !canHeal, '', 'heal')}
-      ${btn('cb', 'Бежать', Math.round(fleeChance() * 100) + '%', false, '', 'flee')}
-      ${gang ? btn('cb', 'Откупиться', `${bribeCost()} талонов (есть ${g.inv.coupon || 0})`, !has('coupon', bribeCost()), 'wide', 'bribe') : ''}
-    </div></div>`);
+  showModal(`<div class="card battle"><div class="bt">
+    <div class="bside"><div class="eyebrow">Ход ${c.turn}${c.f ? ' · ' + FACTIONS[c.f].n : ''}</div>
+      <div><div class="hpline"><span>Здоровье</span><span class="mono">${Math.max(0, Math.round(g.s.hp))} / ${maxHp()}</span></div><div class="hp you"><i style="width:${clamp(g.s.hp, 0, 100)}%"></i></div></div>
+      ${c.armMax ? `<div><div class="hpline"><span>Броня</span><span class="mono">${Math.round(c.arm)} / ${c.armMax}</span></div><div class="hp arm"><i style="width:${c.arm / c.armMax * 100}%"></i></div></div>` : ''}
+      <div class="hpline"><span>Очки действия</span><span class="aps">${[0, 1, 2, 3, 4].map(i => `<i class="${i < c.ap ? 'on' : ''}"></i>`).join('')}</span></div>
+      <div class="ef">${c.moved ? 'Перемещение в этом ходу использовано.' : `Перемещение: до ${cSteps()} клеток, бесплатно.`}${onT === 2 ? ' Ты в укрытии.' : onT === 3 ? ' Ты на высоте: +1 к дальности.' : ''}</div>
+      ${btn('cb', 'Конец хода', 'следующий ход: +2 ОД', false, 'primary', 'end')}
+      ${wb('melee', mw)}${wb('ranged', rw)}
+      ${btn('cb', 'Лечиться', canHeal ? '1 ОД · бинт или аптечка' : 'нечем', !canHeal || c.ap < 1, '', 'heal')}
+      ${onExit ? btn('cb', 'Уйти с поля', 'ты на выходе', false, 'primary', 'exit') : ''}
+      ${gang ? btn('cb', 'Откупиться', `${bribeCost()} талонов (есть ${g.inv.coupon || 0})`, !has('coupon', bribeCost()), '', 'bribe') : ''}
+    </div>
+    <div class="bgrid">${grid}</div>
+    <div class="bside"><div class="eyebrow">Противники</div>
+      ${foes.map(u => { const e = ENEMIES[u.k]; return `<div class="frow"><span class="fp">${art('e:' + u.k)}</span><div><div class="nm">${e.n}</div><div class="hp"><i style="width:${clamp(u.hp / u.max * 100, 0, 100)}%"></i></div><div class="ef">${Math.max(0, u.hp)} зд.${u.arm > 0 ? ' · броня ' + Math.round(u.arm) : ''} · ${cheb(me, u)} кл.${cCanHit(c, me, u, w.r, ranged) ? ' · ' + Math.round(cAcc(c, w, u) * 100) + '%' : ''}</div></div></div>`; }).join('')}
+      <ul class="clog">${c.log.slice(-5).map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+      <div class="ef">Зелёные клетки — куда можно шагнуть. Красная рамка — кого достаёшь выбранным оружием. Куст — укрытие от пуль, бархан — высота, ✕ — ловушка, ⇲ — выход.</div>
+    </div></div></div>`);
 }
 function renderTrade() {
   const f = baseHere(); if (!f || !canTrade(f)) return hideModal();
@@ -414,7 +429,8 @@ function tapAt(sx, sy) {
   if (city) { const fine = city.r * z > 44, tl = Math.max(tol, city.grid.s * .75); for (const s of city.sites) { const d = hyp(s.x - wx, s.y - wy); if ((fine ? d <= tl : true) && d < bd) { bd = d; best = { x: s.x, y: s.y, n: s.n + ', ' + city.n, id: s.id }; } } }
   if (!best) for (const p of POIS) { if (!g.found[p.id]) continue; const d = hyp(p.x - wx, p.y - wy); if (d <= Math.max(2, tol) && d < bd) { bd = d; best = { x: p.x, y: p.y, n: p.n, id: p.id }; } }
   if (!best) { if (isWater(wx, wy)) return toast('Там вода.', ''); best = { x: wx, y: wy, n: city ? 'Улицы, ' + city.n : null }; }
-  sel = best; scr = 'map'; renderNav(); renderSheet(false); renderRoute();
+  sel = best; scr = 'map'; if (startTrip(sel.x, sel.y)) cam.follow = !(curHere.city && hyp(sel.x - curHere.city.x, sel.y - curHere.city.y) <= curHere.city.r); else sel = null;
+  renderNav(); renderSheet(false); renderRoute();
 }
 const ptrs = new Map(); let drag = null, pinch = null;
 cv.addEventListener('pointerdown', e => { try { cv.setPointerCapture(e.pointerId); } catch (_) { /* не критично */ } ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, moved: false }; else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: cam.z }; if (drag) drag.moved = true; } });

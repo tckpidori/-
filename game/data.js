@@ -190,6 +190,8 @@ window.D = (function () {
     backpack: { n: 'Рюкзак', c: 'wear', slot: 'back', w: 1, v: 35, cap: 25 },
     bigpack: { n: 'Станковый рюкзак', c: 'wear', slot: 'back', w: 2, v: 70, cap: 40 },
 
+    torch: { n: 'Факел', c: 'tool', w: .5, v: 3, d: 'Свет при обыске: находок больше. Быстро сгорает' },
+    flashlight: { n: 'Фонарик', c: 'tool', w: .25, v: 30, d: 'Яркий свет при обыске: находок заметно больше' },
     matches: { n: 'Спички', c: 'tool', w: .01, v: 1, d: 'Для костра' },
     lighter: { n: 'Зажигалка', c: 'tool', w: .05, v: 25, tool: 1, d: 'Костёр без спичек' },
     pot: { n: 'Котелок', c: 'tool', w: .5, v: 15, tool: 1, d: 'Кипятить воду и варить' },
@@ -225,11 +227,11 @@ window.D = (function () {
 
   /* ---------- постройки и лут: [предмет, вес, мин, макс] ---------- */
   const BUILD = {
-    house: { n: 'Жилой дом', se: [2, 3], dng: .08, h: 1, loot: [['canned',3],['crackers',3,1,2],['buckwheat',2],['condmilk',1],['water',3,1,2],['tealeaf',2],['salt',1.5],['matches',3,3,8],['cloth',4,1,3],['book',2],['tobacco',1],['vodka',1],['pot',1],['sewkit',.8],['knife',1],['cap',1],['jacket',.8],['pants',.8],['shoes',.8],['bag',.7],['bandage',1.5],['coldmed',1],['painkiller',1],['coupon',1,3,10],['tape',1],['rope',.8]] },
+    house: { n: 'Жилой дом', se: [2, 3], dng: .08, h: 1, loot: [['canned',3],['crackers',3,1,2],['buckwheat',2],['condmilk',1],['water',3,1,2],['tealeaf',2],['salt',1.5],['matches',3,3,8],['cloth',4,1,3],['book',2],['tobacco',1],['vodka',1],['pot',1],['sewkit',.8],['knife',1],['cap',1],['jacket',.8],['pants',.8],['shoes',.8],['bag',.7],['bandage',1.5],['coldmed',1],['painkiller',1],['coupon',1,3,10],['tape',1],['rope',.8],['flashlight',.7]] },
     shop: { n: 'Продмаг', se: [2, 3], dng: .12, h: 1, loot: [['canned',5,1,2],['cfish',4,1,2],['condmilk',3],['crackers',4,1,3],['buckwheat',4,1,2],['flour',2],['salt',2],['choco',2],['water',4,1,3],['vodka',2],['tealeaf',3],['tobacco',2],['matches',3,5,10],['coupon',2,5,15]] },
     pharmacy: { n: 'Аптека', se: [2, 2], dng: .12, h: 1, loot: [['bandage',5,1,3],['iodine',4],['painkiller',4,1,2],['coldmed',3],['charcoaltab',3,1,2],['antibiotic',2],['alcohol',2],['ointment',2],['medkit',.8],['antirad',.6]] },
     hospital: { n: 'Больница', se: [3, 5], dng: .22, h: 1.5, loot: [['bandage',5,2,4],['iodine',3],['alcohol',3],['antibiotic',3,1,2],['painkiller',3],['medkit',1.5],['antirad',1.2],['splint',2],['ointment',2],['charcoaltab',2],['cloth',2,2,4]] },
-    garage: { n: 'Гаражи', se: [2, 4], dng: .1, h: 1, loot: [['scrap',5,1,3],['wire',3,1,2],['tape',3],['rubber',3],['fuel',3,2,6],['wheel',2],['chain',1.2],['bikeframe',.9],['battery',1],['toolkit',1],['crowbar',1.2],['nails',2],['rope',1],['electronics',1.5]] },
+    garage: { n: 'Гаражи', se: [2, 4], dng: .1, h: 1, loot: [['scrap',5,1,3],['wire',3,1,2],['tape',3],['rubber',3],['fuel',3,2,6],['wheel',2],['chain',1.2],['bikeframe',.9],['battery',1],['toolkit',1],['crowbar',1.2],['nails',2],['rope',1],['electronics',1.5],['flashlight',1]] },
     gas: { n: 'АЗС', se: [1, 2], dng: .12, h: .7, loot: [['fuel',6,3,10],['crackers',2],['water',2],['tobacco',1.5],['matches',2,3,6],['rubber',1],['choco',1],['coupon',1,3,10]] },
     warehouse: { n: 'Склад', se: [3, 4], dng: .15, h: 1.5, loot: [['canned',3,1,3],['buckwheat',2,1,3],['flour',2],['cloth',3,2,4],['nails',3],['wire',2],['rope',2],['scrap',2],['coal',2,1,3],['tape',2],['boots',1],['coat',1],['backpack',.6],['tent',.5],['salt',1]] },
     factory: { n: 'Завод', se: [3, 5], dng: .15, h: 1.5, loot: [['scrap',6,2,4],['wire',4,1,3],['chemicals',3],['electronics',3,1,2],['coal',3,1,3],['rubber',2],['toolkit',1],['nails',2],['battery',.8],['helmet',1],['respirator',1]] },
@@ -332,6 +334,7 @@ window.D = (function () {
     { id: 'bandage', g: 'Медицина', n: 'Прокипятить бинты', need: { cloth: 2 }, tools: ['pot'], fire: 1, out: { bandage: 2 }, h: .5, xp: ['med', 4] },
     { id: 'splint', g: 'Медицина', n: 'Шина', need: { wood: 1, cloth: 1 }, out: { splint: 1 }, h: .3, xp: ['med', 3] },
     { id: 'charcoaltab', g: 'Медицина', n: 'Толчёный уголь', need: { coal: 1 }, out: { charcoaltab: 2 }, h: .3, xp: ['med', 3] },
+    { id: 'torch', g: 'Снаряжение', n: 'Факел', need: { wood: 1, cloth: 1 }, out: { torch: 2 }, h: .3 },
     { id: 'club', g: 'Оружие', n: 'Дубина', need: { wood: 1 }, tools: ['knife'], out: { club: 1 }, h: .5 },
     { id: 'spear', g: 'Оружие', n: 'Копьё', need: { wood: 1, scrap: 1, wire: 1 }, tools: ['knife'], out: { spear: 1 }, h: 1, xp: ['mech', 4] },
     { id: 'bow', g: 'Оружие', n: 'Лук', need: { wood: 2, rope: 1 }, tools: ['knife'], out: { bow: 1 }, h: 2, xp: ['mech', 6] },
@@ -426,7 +429,7 @@ window.D = (function () {
   const RST = { boil: ['fire', 0], melt: ['fire', 0], meat: ['fire', 0], fishc: ['fire', 0], bpotato: ['fire', 0],
     filter: ['kitchen', 1], tea: ['kitchen', 1], porridge: ['kitchen', 1], bread: ['kitchen', 1], stew: ['kitchen', 2], jerky: ['kitchen', 2],
     ragband: ['med', 0], splint: ['med', 0], bandage: ['med', 1], charcoaltab: ['med', 1], herbtea: ['med', 1],
-    club: ['bench', 0], fishrod: ['bench', 0], spear: ['bench', 1], arrow: ['bench', 1], bow: ['bench', 1], respirator: ['bench', 1], bike: ['bench', 2], gunpowder: ['bench', 2], a12: ['bench', 2], moto: ['bench', 3], car: ['bench', 3],
+    torch: ['bench', 0], club: ['bench', 0], fishrod: ['bench', 0], spear: ['bench', 1], arrow: ['bench', 1], bow: ['bench', 1], respirator: ['bench', 1], bike: ['bench', 2], gunpowder: ['bench', 2], a12: ['bench', 2], moto: ['bench', 3], car: ['bench', 3],
     cap: ['sew', 1], bag: ['sew', 1], coat: ['sew', 1], warmpants: ['sew', 1], ushanka: ['sew', 2], furcoat: ['sew', 2], unty: ['sew', 2], backpack: ['sew', 2], tent: ['sew', 2], sleepbag: ['sew', 2] };
   for (const r of RECIPES) r.st = RST[r.id] || ['bench', 0];
   const PERKS = {

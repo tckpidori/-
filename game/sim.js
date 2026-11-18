@@ -108,7 +108,8 @@ const lvlNeed = l => 30 + 20 * l;
 /* ---------- потребности, раны, болезни ---------- */
 const painLevel = () => g.time < g.pk ? 0 : g.wounds.reduce((a, w) => a + WOUNDS[w.t].pain, 0);
 const maxHp = () => 100 - (g.dis.frostbite ? 15 : 0) - (g.s.rad >= 60 ? 15 : 0);
-function clampS() { const s = g.s; for (const k of ['hunger', 'thirst', 'warmth', 'mood']) s[k] = clamp(s[k], 0, 100); s.rad = clamp(s.rad, 0, 120); s.hp = Math.min(s.hp, maxHp()); }
+const capOf = k => 100 - ((k === 'hunger' && (g.dis.poison || g.dis.dysentery)) || (k === 'thirst' && g.dis.poison) ? 25 : 0);
+function clampS() { const s = g.s; for (const k of ['hunger', 'thirst', 'warmth', 'mood']) s[k] = clamp(s[k], 0, capOf(k)); s.rad = clamp(s.rad, 0, 120); s.hp = Math.min(s.hp, maxHp()); }
 function addWound(t) { if (g.wounds.length >= 7) return; g.wounds.push({ t, bl: WOUNDS[t].bleed, b: 0, c: 0, sp: 0, h: WOUNDS[t].heal }); }
 function getSick(d, msg) { if (g.dis[d]) return; g.dis[d] = DIS[d].dur || -1; log(msg, 'bad'); UIH.toast(DIS[d].n, 'bad'); }
 
@@ -160,7 +161,7 @@ function step(dt, ctx) {
   src(bleed, 'от потери крови');
   for (const k in ds) src(DIS[k].hp, 'от болезни (' + DIS[k].n.toLowerCase() + ')');
   if (dmg > 0) { s.hp -= dmg * dt; g.cause = cause; }
-  else if (s.hunger > 30 && s.thirst > 30 && s.warmth > 35 && s.rad < 30) s.hp += (rest ? 1.6 * (1 + .25 * g.st.rest) : .4) * (1 + .1 * g.sk.med[0]) * dt;
+  else if (s.hunger > 30 && s.thirst > 30 && s.warmth > 35 && s.rad < 30) { const need = s.hp < maxHp(); s.hp += (rest ? 1.6 * (1 + .25 * g.st.rest) : .4) * (1 + .1 * g.sk.med[0]) * dt; if (rest && need) { const k = Math.max(.4, 1 - .25 * g.st.rest); s.hunger -= .7 * k * dt; s.thirst -= .9 * k * dt; } }
   clampS();
   if (s.hp <= 0) die('Погиб ' + (g.cause || 'от ран'));
 }
@@ -245,7 +246,7 @@ function actSearch() {
   pass(m.h, {}); if (g.over) return done();
   st.s--; g.stats.searched++;
   const zone = radAt(g.pos.x, g.pos.y) > .1;
-  const loot = () => { const got = {}, bonus = 1 + .06 * g.sk.surv[0] + (owns('crowbar') ? .12 : 0) + .08 * pk('scout'); for (const r of m.loot) if (chance(Math.min(.95, r.p * bonus))) got[r[0]] = (got[r[0]] || 0) + (r.length > 2 ? ri(r[2], r[3]) : 1); addXp('surv', 2); found(got, s.n); };
+  const loot = () => { const got = {}, lt = has('flashlight') ? 'flashlight' : has('torch') ? 'torch' : null, bonus = 1 + .06 * g.sk.surv[0] + (owns('crowbar') ? .12 : 0) + .08 * pk('scout') + (lt === 'flashlight' ? .25 : lt ? .1 : 0); for (const r of m.loot) if (chance(Math.min(.95, r.p * bonus))) got[r[0]] = (got[r[0]] || 0) + (r.length > 2 ? ri(r[2], r[3]) : 1); addXp('surv', 2); found(got, s.n); if (lt && chance(lt === 'torch' ? .34 : .06)) { take(lt, 1); log(lt === 'torch' ? 'Факел догорел.' : 'Фонарик сел.'); } };
   if (chance(m.dng * (isNight() ? 1.4 : 1) * (zone ? 1.3 : 1) * (friendlyCity() ? .3 : 1))) {
     return startCombat(makeEncounter(m.mil ? 'mil' : 'city'), { close: true, intro: `${m.n}: внутри кто-то есть.` }, res => { if (res === 'win') loot(); else { log('Обыск сорван.', 'bad'); st.s++; } done(); });
   }
@@ -329,8 +330,8 @@ function moveMode() {
 }
 function clipRoute(x0, y0, x1, y1) {
   x1 = clamp(x1, 5, W - 5); y1 = clamp(y1, 5, H - 5);
-  const d = hyp(x1 - x0, y1 - y0), n = Math.max(1, Math.ceil(d / 4)); let lx = x0, ly = y0, run = 0;
-  for (let i = 1; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; if (isWater(x, y)) { run += d / n; if (run > 40) return { x: lx, y: ly, cut: true }; } else { run = 0; lx = x; ly = y; } }
+  const d = hyp(x1 - x0, y1 - y0), n = Math.max(1, Math.ceil(d / 4)), frozen = seasonT(x0, y0) < -6; let lx = x0, ly = y0, run = 0;
+  for (let i = 1; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; if (isWater(x, y)) { run += d / n; if (run > (frozen ? 220 : 40)) return { x: lx, y: ly, cut: true }; } else { run = 0; lx = x; ly = y; } }
   return { x: lx, y: ly, cut: isWater(x1, y1) };
 }
 function routeInfo(tx, ty) { const e = clipRoute(g.pos.x, g.pos.y, tx, ty), km = hyp(e.x - g.pos.x, e.y - g.pos.y), m = moveMode(); return { x: e.x, y: e.y, cut: e.cut, km, m, h: km / m.sp, fuel: km * m.fuel }; }
@@ -372,75 +373,110 @@ function encPool(ctx) {
   return pool;
 }
 function makeEncounter(ctx) { const k = pickW(encPool(ctx))[0], e = ENEMIES[k]; return { k, n: ri(e.grp[0], e.grp[1]) }; }
+/* Бой на поле 7×7. Клетки: 0 земля, 1 препятствие, 2 укрытие, 3 холм, 4 ловушка, 5 выход. */
+const CW = 7, DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const CWEAP = { fist: { n: 'Кулаки', ap: 1, r: 1, dmg: [2, 4] }, knife: { ap: 1, r: 1 }, club: { ap: 1, r: 1 }, crowbar: { ap: 1, r: 1 }, shovel: { ap: 1, r: 1 }, axe: { ap: 2, r: 1 }, spear: { ap: 1, r: 2 }, bow: { ap: 1, r: 4 }, pistol: { ap: 1, r: 4 }, shotgun: { ap: 2, r: 3 }, rifle: { ap: 2, r: 6, pierce: 1 }, akm: { ap: 2, r: 5 } };
+ENEMIES.soldier.arm = 20; ENEMIES.deserter.arm = 10; ENEMIES.artguard.arm = 8; ENEMIES.mbear.arm = 12;
+const inB = (x, y) => x >= 0 && y >= 0 && x < CW && y < CW;
+const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+const cUnitAt = (c, x, y) => c.un.find(u => u.hp > 0 && u.x === x && u.y === y);
+const cPass = (c, x, y) => inB(x, y) && c.cells[y][x] !== 1 && !cUnitAt(c, x, y);
+const cSteps = () => g.wounds.some(w => w.t === 'fracture') ? 1 : 2;
+function cReach(c, u, steps) { const d = {}, q = [[u.x, u.y, 0]]; d[u.x + ',' + u.y] = 0; while (q.length) { const [x, y, n] = q.shift(); if (n >= steps) continue; for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (k in d || !cPass(c, nx, ny)) continue; d[k] = n + 1; q.push([nx, ny, n + 1]); } } return d; }
+function cLos(c, a, b) { if (c.cells[a.y][a.x] === 3) return true; let x = a.x, y = a.y; const dx = Math.abs(b.x - x), dy = Math.abs(b.y - y), sx = x < b.x ? 1 : -1, sy = y < b.y ? 1 : -1; let err = dx - dy; for (let n = 0; n < 20; n++) { const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } if (x === b.x && y === b.y) return true; if (c.cells[y][x] === 1) return false; } return true; }
+function cCanHit(c, a, b, r, ranged) { const d = cheb(a, b); if (d > r + (c.cells[a.y][a.x] === 3 ? 1 : 0)) return false; return !ranged || d <= 1 || cLos(c, a, b); }
+function cWeapon(mode) { const k = mode === 'ranged' ? g.eq.ranged : g.eq.melee; if (!k) return mode === 'ranged' ? null : Object.assign({ k: 'fist' }, CWEAP.fist); const it = ITEMS[k]; return Object.assign({ k, n: it.n, dmg: it.dmg, acc: it.acc, ammo: it.ammo, burst: it.burst, spread: it.spread }, CWEAP[k] || { ap: 1, r: 1 }); }
+function cAcc(c, w, t) { const me = c.un[0], p = w.acc ? w.acc - .05 * cheb(me, t) + .04 * pk('marksman') - (c.cells[t.y][t.x] === 2 ? .3 : 0) : .9; return clamp(p + .04 * g.sk.fight[0] - .05 * painLevel() - (g.s.mood < 25 ? .12 : 0), .1, .97); }
+function cHurt(u, dmg, pierce) { if (u.arm > 0) { const ab = Math.min(u.arm, pierce ? dmg * 2 : dmg); u.arm -= ab; dmg -= pierce ? ab / 2 : ab; } u.hp -= Math.round(dmg); }
+const cFoes = c => c.un.filter(u => !u.me && u.hp > 0);
+const bribeCost = () => 12 * cFoes(g.combat).length;
 function startCombat(enc, opt, cb) {
-  const e = ENEMIES[enc.k], en = [];
-  for (let i = 0; i < enc.n; i++) en.push({ k: enc.k, hp: e.hp, d: (opt.close ? ri(4, 14) : e.rng ? ri(25, Math.min(60, e.rng + 15)) : ri(14, 38)) + i * ri(0, 4) });
-  const who = enc.n > 1 ? `${e.n} — ${enc.n}` : e.n;
-  g.combat = { en, tgt: 0, f: e.f || null, log: [(opt.intro ? opt.intro + ' ' : '') + `Противник: ${who}.`] };
+  const e = ENEMIES[enc.k]; let cells, un, ok = false;
+  for (let tries = 0; tries < 40 && !ok; tries++) {
+    cells = Array.from({ length: CW }, () => Array(CW).fill(0));
+    const put = (t, n) => { for (let i = 0; i < n; i++) { const x = ri(0, 6), y = ri(1, 5); if (!cells[y][x]) cells[y][x] = t; } };
+    put(1, ri(4, 7)); put(2, ri(2, 4)); put(3, ri(1, 2)); put(4, ri(1, 2));
+    cells[6][chance(.5) ? 0 : 6] = 5; cells[6][3] = 0;
+    un = [{ me: 1, x: 3, y: 6, hp: 1 }];
+    const xs = [3, 1, 5, 2, 4, 0, 6]; for (let i = 0; i < Math.min(enc.n, 7); i++) { const x = xs[i]; cells[0][x] = 0; un.push({ k: enc.k, x, y: 0, hp: e.hp, max: e.hp, arm: e.arm || 0 }); }
+    const seen = { '3,6': 1 }, q = [[3, 6]]; while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (!inB(nx, ny) || cells[ny][nx] === 1 || seen[k]) continue; seen[k] = 1; q.push([nx, ny]); } }
+    ok = un.every(u => seen[u.x + ',' + u.y]);
+  }
+  const who = enc.n > 1 ? `${e.n} — ${enc.n}` : e.n, am = armor() * 8;
+  g.combat = { cells, un, ap: 3, moved: false, turn: 1, arm: am, armMax: am, mode: g.eq.ranged && has(ITEMS[g.eq.ranged].ammo) ? 'ranged' : 'melee', f: e.f || null, log: [(opt.intro ? opt.intro + ' ' : '') + `Противник: ${who}.`] };
   combatCb = cb; trip = null; UIH.combat();
 }
-function playerAcc(w, d) { const base = w.rng ? (d > w.rng ? .1 : w.acc - d / w.rng * .45) : .85; return clamp(base + (w.rng ? .04 * pk('marksman') : 0) + .04 * g.sk.fight[0] - .05 * painLevel() - (g.s.mood < 25 ? .12 : 0), .08, .96); }
-const fleeChance = () => { const c = g.combat, al = c.en.filter(x => x.hp > 0), md = Math.min(...al.map(x => x.d)); return clamp(.3 + md / 50 * .4 + (withVeh() ? .25 : 0) - (g.wounds.some(x => x.t === 'fracture') ? .25 : 0) - (al.some(x => ENEMIES[x.k].rng >= x.d) ? .15 : 0), .08, .95); };
-const bribeCost = () => 12 * g.combat.en.filter(x => x.hp > 0).length;
 function hitPlayer(x, e, push) {
-  const dmg = Math.max(1, ri(e.dmg[0], e.dmg[1]) - armor()); g.s.hp -= dmg; if (e.rad) g.s.rad += e.rad; if (e.venom && chance(.35)) getSick('poison', 'Змеиный яд: тошнит и темнеет в глазах.');
+  const c = g.combat; let dmg = ri(e.dmg[0], e.dmg[1]); const ab = Math.min(c.arm, dmg); c.arm -= ab; dmg -= ab;
+  if (dmg <= 0) return push(`${e.n}: удар приняла броня (−${ab}).`);
+  g.s.hp -= dmg; if (e.rad) g.s.rad += e.rad; if (e.venom && chance(.35)) getSick('poison', 'Змеиный яд: тошнит и темнеет в глазах.');
   let w = null; const r = Math.random();
   if (e.atk === 'bite') { if (r < .45) w = 'bite'; } else if (e.atk === 'claw') { if (r < .6) w = 'cut'; } else if (e.atk === 'blade') { if (r < .5) w = 'cut'; }
   else if (e.atk === 'blunt') { if (r < .08) w = 'fracture'; else if (r < .5) w = 'bruise'; } else if (e.atk === 'shot') { if (r < .6) w = 'gunshot'; }
   if (w) addWound(w);
-  push(`${e.n}: −${dmg} здоровья${w ? ' · ' + WOUNDS[w].n.toLowerCase() : ''}.`);
+  push(`${e.n}: −${dmg} здоровья${ab ? `, броня −${ab}` : ''}${w ? ' · ' + WOUNDS[w].n.toLowerCase() : ''}.`);
 }
 function cAct(a, arg) {
-  const c = g.combat; if (!c) return;
-  const push = m => c.log.push(m), alive = () => c.en.filter(x => x.hp > 0);
-  if (a === 'tgt') { if (c.en[+arg] && c.en[+arg].hp > 0) c.tgt = +arg; return UIH.combat(); }
-  if (!c.en[c.tgt] || c.en[c.tgt].hp <= 0) c.tgt = c.en.findIndex(x => x.hp > 0);
-  const t = c.en[c.tgt], te = ENEMIES[t.k], fl = 1 + .05 * g.sk.fight[0];
-  if (a === 'melee') {
-    const w = g.eq.melee ? ITEMS[g.eq.melee] : { n: 'Кулаки', dmg: [2, 4], reach: 2 };
-    if (t.d > w.reach) { push(`До цели ${Math.round(t.d)} м — слишком далеко для удара.`); return UIH.combat(); }
-    if (chance(playerAcc(w, t.d))) { const dmg = Math.round(ri(w.dmg[0], w.dmg[1]) * fl * (1 + .1 * pk('heavy'))); t.hp -= dmg; push(`${w.n}: ${te.n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); } else push(`${w.n}: мимо.`);
-  } else if (a === 'ranged') {
-    const w = g.eq.ranged ? ITEMS[g.eq.ranged] : null; if (!w || !has(w.ammo)) { push('Стрелять нечем.'); return UIH.combat(); }
-    const shots = Math.min(w.burst || 1, g.inv[w.ammo]);
-    for (let i = 0; i < shots; i++) {
-      take(w.ammo, 1); let x = c.en[c.tgt]; if (!x || x.hp <= 0) { c.tgt = c.en.findIndex(q => q.hp > 0); x = c.en[c.tgt]; if (!x) break; }
-      if (chance(playerAcc(w, x.d))) { let dmg = ri(w.dmg[0], w.dmg[1]) * fl; if (w.spread && x.d > 8) dmg *= Math.max(.4, 1 - (x.d - 8) / w.rng * .7); dmg = Math.round(dmg); x.hp -= dmg; push(`${w.n}: ${ENEMIES[x.k].n} −${dmg}${x.hp <= 0 ? ' — готов' : ''}.`); }
-      else push(`${w.n}: мимо.`);
-    }
-  } else if (a === 'near') { for (const x of alive()) x.d = Math.max(1.5, x.d - 8); push('Ты идёшь на сближение.'); }
-  else if (a === 'far') { for (const x of alive()) x.d += 5; push('Ты отходишь.'); }
-  else if (a === 'heal') {
+  const c = g.combat; if (!c) return; const me = c.un[0], push = m => c.log.push(m);
+  if (a === 'mode') { c.mode = arg; return UIH.combat(); }
+  if (a === 'cell') {
+    const xy = String(arg).split(',').map(Number), x = xy[0], y = xy[1], t = cUnitAt(c, x, y);
+    if (t && !t.me) {
+      const w = (c.mode === 'ranged' && cWeapon('ranged')) || cWeapon('melee'), ranged = !!w.acc;
+      if (c.ap < w.ap) { push(`Нужно ${w.ap} ОД, есть ${c.ap}.`); return UIH.combat(); }
+      if (w.ammo && !has(w.ammo)) { push('Нет патронов.'); return UIH.combat(); }
+      if (!cCanHit(c, me, t, w.r, ranged)) { push(cheb(me, t) > w.r + (c.cells[me.y][me.x] === 3 ? 1 : 0) ? 'Цель слишком далеко.' : 'Цель закрыта препятствием.'); return UIH.combat(); }
+      c.ap -= w.ap; const shots = w.ammo ? Math.min(w.burst || 1, g.inv[w.ammo]) : 1, fl = 1 + .05 * g.sk.fight[0];
+      for (let i = 0; i < shots && t.hp > 0; i++) {
+        if (w.ammo) take(w.ammo, 1);
+        if (chance(cAcc(c, w, t))) { let dmg = ri(w.dmg[0], w.dmg[1]) * fl * (ranged ? 1 : 1 + .1 * pk('heavy')); if (w.spread && cheb(me, t) > 1) dmg *= .75; dmg = Math.round(dmg); cHurt(t, dmg, w.pierce); push(`${w.n}: ${ENEMIES[t.k].n} −${dmg}${t.hp <= 0 ? ' — готов' : ''}.`); }
+        else push(`${w.n}: мимо.`);
+      }
+    } else if (!t) {
+      if (c.moved) { push('В этот ход ты уже перемещался.'); return UIH.combat(); }
+      if (!cReach(c, me, cSteps())[x + ',' + y]) return UIH.combat();
+      me.x = x; me.y = y; c.moved = true;
+      if (c.cells[y][x] === 4) { c.cells[y][x] = 0; const dm = ri(6, 12); g.s.hp -= dm; if (chance(.4)) addWound('cut'); push(`Ловушка! −${dm} здоровья.`); }
+    } else return;
+  } else if (a === 'heal') {
+    if (c.ap < 1) { push('Нет очков действия.'); return UIH.combat(); }
     const i = g.wounds.findIndex(w => w.bl > 0 && !w.b);
     if (i >= 0 && (has('bandage') || has('ragband'))) { if (has('bandage')) { take('bandage'); g.wounds[i].b = 2; } else { take('ragband'); g.wounds[i].b = 1; } push('Ты наскоро перевязал рану.'); }
     else if (has('medkit')) { take('medkit'); g.s.hp += 40 * (1 + .1 * g.sk.med[0]); for (const w of g.wounds) { if (WOUNDS[w.t].bleed) w.b = 2; if (WOUNDS[w.t].inf) w.c = 1; } clampS(); push('Аптечка: +здоровье.'); }
     else { push('Лечиться нечем.'); return UIH.combat(); }
-  } else if (a === 'flee') {
-    if (chance(fleeChance())) return endCombat('flee'); push('Уйти не удалось.');
+    c.ap--;
+  } else if (a === 'exit') { if (c.cells[me.y][me.x] === 5) return endCombat('flee'); return;
   } else if (a === 'bribe') {
     const cost = bribeCost(); if (!c.f || !FACTIONS[c.f].gang || !has('coupon', cost)) return UIH.combat();
     take('coupon', cost); g.rep[c.f] = clamp(g.rep[c.f] + 6, -100, 100); log(`Откупился от банды «${FACTIONS[c.f].n}»: ${cost} талонов.`); return endCombat('bribe');
-  }
-  if (!alive().length) return endCombat('win');
-  for (const x of c.en) {
-    if (x.hp <= 0) continue; const e = ENEMIES[x.k];
-    if (e.rng) { if (x.d <= e.rng) { if (chance(Math.max(.15, e.acc * (1 - x.d / e.rng * .5)))) hitPlayer(x, e, push); else push(`${e.n} стреляет — мимо.`); } else x.d = Math.max(e.rng * .8, x.d - e.spd); }
-    else if (x.d <= 2.5) { if (chance(.75)) hitPlayer(x, e, push); else push(`${e.n} промахивается.`); }
-    else x.d = Math.max(2, x.d - e.spd);
+  } else if (a === 'end') return cEnemyTurn();
+  else return;
+  if (g.s.hp <= 0) { die('Погиб в бою'); return done(); }
+  if (!cFoes(c).length) return endCombat('win');
+  if (c.ap <= 0 && c.moved) return cEnemyTurn();
+  UIH.combat();
+}
+function cEnemyTurn() {
+  const c = g.combat, me = c.un[0], push = m => c.log.push(m), dist = {}, q = [[me.x, me.y]]; dist[me.x + ',' + me.y] = 0; let last = '';
+  while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (!inB(nx, ny) || c.cells[ny][nx] === 1 || k in dist) continue; dist[k] = dist[x + ',' + y] + 1; q.push([nx, ny]); } }
+  for (const u of c.un) {
+    if (u.me || u.hp <= 0) continue; const e = ENEMIES[u.k], ranged = !!e.rng, r = ranged ? clamp(Math.round(e.rng / 12), 3, 6) : 1, mv = e.spd >= 12 ? 3 : 2; last = e.n;
+    if (!cCanHit(c, u, me, r, ranged)) { const reach = cReach(c, u, mv); let best = null, bs = 1e9; for (const k in reach) { const xy = k.split(',').map(Number), p = { x: xy[0], y: xy[1] }; if (c.cells[p.y][p.x] === 4 || c.cells[p.y][p.x] === 5) continue; const sc = (cCanHit(c, p, me, r, ranged) ? 0 : 100) + (dist[k] == null ? 50 : dist[k]) - (ranged && c.cells[p.y][p.x] === 2 ? .5 : 0); if (sc < bs) { bs = sc; best = p; } } if (best) { u.x = best.x; u.y = best.y; } }
+    if (cCanHit(c, u, me, r, ranged)) { const d = cheb(u, me), far = ranged && d > 1, p = far ? Math.max(.12, e.acc - .07 * d - (c.cells[me.y][me.x] === 2 ? .3 : 0)) : .65; if (chance(p)) hitPlayer(u, e, push); else push(`${e.n} ${far ? 'стреляет — мимо' : 'промахивается'}.`); if (g.s.hp <= 0) break; }
   }
   g.time += .03;
-  if (g.s.hp <= 0) { die('Погиб в бою: ' + te.n.toLowerCase()); return done(); }
-  UIH.combat();
+  if (g.s.hp <= 0) { die('Погиб в бою: ' + last.toLowerCase()); return done(); }
+  c.ap = Math.min(5, c.ap + 2); c.moved = false; c.turn++; UIH.combat();
 }
 function endCombat(res) {
   const c = g.combat, cb = combatCb; g.combat = null; combatCb = null;
   if (res === 'win') {
     const got = {}; let xp = 0;
-    for (const x of c.en) { const e = ENEMIES[x.k]; xp += e.xp; g.stats.kills++; for (const d of e.drop) if (chance(d[1])) { const q = ri(d[2], d[3]); gput(d[0], q); got[d[0]] = (got[d[0]] || 0) + q; } }
+    for (const x of c.un) { if (x.me) continue; const e = ENEMIES[x.k]; xp += e.xp; g.stats.kills++; for (const d of e.drop) if (chance(d[1])) { const q = ri(d[2], d[3]); gput(d[0], q); got[d[0]] = (got[d[0]] || 0) + q; } }
     if (c.f) { g.rep[c.f] = clamp(g.rep[c.f] - 8, -100, 100); if (FACTIONS[c.f].gang) { g.rep.gar = clamp(g.rep.gar + 1, -100, 100); g.rep.put = clamp(g.rep.put + 1, -100, 100); } }
     g.s.mood = clamp(g.s.mood + 3, 0, 100); addXp('fight', xp);
     const t = fmtGot(got); log(`Победа. ${t ? 'Трофеи лежат на земле: ' + t + '.' : 'Трофеев нет.'}`, 'good'); UIH.toast(t ? 'Трофеи на земле: ' + t : 'Победа', 'good');
-  } else if (res === 'flee') { log('Удалось уйти.'); UIH.toast('Ты ушёл', ''); }
+  } else if (res === 'flee') { log('Удалось уйти с поля.'); UIH.toast('Ты ушёл', ''); }
   if (cb) cb(res); else done();
 }
 
