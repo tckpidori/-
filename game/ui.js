@@ -195,7 +195,7 @@ function renderChar() {
   return h;
 }
 function renderWorld() {
-  let h = '<div><h3>Фракции и банды</h3><div class="items">' + Object.keys(FACTIONS).map(k => { const f = FACTIONS[k]; return `<div class="item"><div><div class="nm"><i class="dot" style="background:${f.c}"></i>${f.n}<span class="q">${f.gang ? 'банда' : 'фракция'}</span></div><div class="ef">${f.d}</div><div class="ef">Базы: ${f.bases.join(', ')}</div></div><div class="bt"><span class="rep${g.rep[k] <= -20 ? ' bad' : ''}">${repWord(k)}<br><b class="mono">${Math.round(g.rep[k])}</b></span></div></div>`; }).join('') + '</div>'
+  let h = '<div><h3>Фракции и банды</h3><div class="items">' + Object.keys(FACTIONS).map(k => { const f = FACTIONS[k]; return `<div class="item"><div><div class="nm">${art('m:' + k) ? `<span class="emb">${art('m:' + k)}</span>` : `<i class="dot" style="background:${f.c}"></i>`}${f.n}<span class="q">${f.gang ? 'банда' : 'фракция'}</span></div><div class="ef">${f.d}</div><div class="ef">Базы: ${f.bases.join(', ')}</div></div><div class="bt"><span class="rep${g.rep[k] <= -20 ? ' bad' : ''}">${repWord(k)}<br><b class="mono">${Math.round(g.rep[k])}</b></span></div></div>`; }).join('') + '</div>'
     + `<p class="desc">Торговля поднимает отношение, убийство людей фракции — роняет. От банды можно откупиться талонами прямо в стычке. Торговец сидит в «Фактории» внутри города-базы.</p><button class="sbtn" data-act="togf">${showF ? 'Скрыть территории на карте' : 'Показать территории на карте'}</button></div>`;
   h += `<div><h3>Итоги</h3><div class="kv"><span>Дней в пути</span><b class="mono">${dayNum()}</b><span>Пройдено</span><b class="mono">${fmtKm(g.stats.km)}</b><span>Побед</span><b class="mono">${g.stats.kills}</b><span>Обысков</span><b class="mono">${g.stats.searched}</b></div></div>`;
   h += '<div><h3>Журнал</h3><ul class="log">' + g.log.slice().reverse().map(e => { const a = e.t + 8; return `<li class="${e.k}"><time>д${Math.floor(a / 24) + 1} ${pad(Math.floor(a % 24))}:${pad(Math.floor(a % 1 * 60))}</time><span>${esc(e.m)}</span></li>`; }).join('') + '</ul></div>';
@@ -318,7 +318,7 @@ const zMin = () => Math.max(.03, cw / W * .95);
 function resize() { const r = cv.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1); cw = r.width; ch = r.height; cv.width = Math.max(1, Math.round(cw * dpr)); cv.height = Math.max(1, Math.round(ch * dpr)); }
 function buildTerrain() {
   const S = 10, w = Math.ceil(W / S), h = Math.ceil(H / S); terrain = document.createElement('canvas'); terrain.width = w; terrain.height = h;
-  const c = terrain.getContext('2d'), img = c.createImageData(w, h), d = img.data, COL = { tundra: [152, 160, 146], taiga: [92, 118, 90], forest: [120, 142, 94], steppe: [172, 160, 104], desert: [198, 176, 124] };
+  const c = terrain.getContext('2d'), img = c.createImageData(w, h), d = img.data, COL = { tundra: [150, 154, 144], taiga: [92, 106, 88], forest: [116, 126, 94], steppe: [162, 152, 112], desert: [188, 170, 128] };
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const ll = unproj(x * S, y * S), col = COL[biome(ll[0], ll[1])], k = .8 + fbm(x / 22, y / 22) * .28 + fbm(x / 5, y / 5) * .14, i = (y * w + x) * 4; d[i] = col[0] * k; d[i + 1] = col[1] * k; d[i + 2] = col[2] * k; d[i + 3] = 255; }
   c.putImageData(img, 0, 0);
   const P = 128, dc = document.createElement('canvas'); dc.width = dc.height = P; const dx = dc.getContext('2d'), im2 = dx.createImageData(P, P), e = im2.data;
@@ -401,14 +401,15 @@ function draw() {
       for (const st of c.sites) if (curHere.site === st || (sel && sel.id === st.id)) { const p = S2(st.x, st.y); label(st.n, p[0], p[1] + sz * .34, INK, '600 11px "Golos Text", system-ui, sans-serif'); }
       label(c.n, sx, clamp(sy - r - 22, 6, ch - 30), INK, '600 14px "Oswald", "Golos Text", sans-serif');
     } else {
-      const rp = Math.max(c.size * 1.5 + 3, r); cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#b39c74'; cx.fill(); cx.lineWidth = c.size === 3 ? 3 : 2.2; cx.strokeStyle = '#1f1a14'; cx.stroke(); if (c.f) { cx.lineWidth = 1.4; cx.strokeStyle = FACTIONS[c.f].c; cx.stroke(); }
-      if (rp > 9) drawArt(cx, 'h:' + (hashStr(c.n) & 3), sx, sy, rp * 1.7); else { cx.beginPath(); cx.arc(sx, sy, Math.min(2.5, rp * .4), 0, 7); cx.fillStyle = '#1f1a14'; cx.fill(); }
-      if (c.size === 3 || z > .22 || (c.size === 2 && z > .1)) label(c.n, sx, sy + rp + 3, INK, c.size === 3 ? '600 12.5px "Golos Text", system-ui, sans-serif' : null);
+      const rp = Math.max(c.size * 1.5 + 3, r), dm = Math.max([0, 15, 20, 27][c.size], rp * 2.15);
+      if (!drawArt(cx, 'm:c' + c.size, sx, sy, dm)) { cx.beginPath(); cx.arc(sx, sy, rp, 0, 7); cx.fillStyle = '#b39c74'; cx.fill(); cx.lineWidth = c.size === 3 ? 3 : 2.2; cx.strokeStyle = '#1f1a14'; cx.stroke(); }
+      if (c.f) { const es = clamp(dm * .5, 12, 30); if (!drawArt(cx, 'm:' + c.f, sx + dm * .36, sy - dm * .36, es)) { cx.beginPath(); cx.arc(sx + dm * .36, sy - dm * .36, 4, 0, 7); cx.fillStyle = FACTIONS[c.f].c; cx.fill(); } }
+      if (c.size === 3 || z > .22 || (c.size === 2 && z > .1)) label(c.n, sx, sy + dm / 2 + 2, INK, c.size === 3 ? '600 12.5px "Golos Text", system-ui, sans-serif' : null);
     }
   }
   if (focus) { cx.beginPath(); cx.rect(0, 0, cw, ch); cx.moveTo(focus[0] + focus[2] + 4, focus[1]); cx.arc(focus[0], focus[1], focus[2] + 4, 0, Math.PI * 2, true); cx.closePath(); cx.fillStyle = 'rgba(8,14,26,.42)'; cx.fill(); }
   // одиночные точки
-  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.2) { const sz = clamp(z * 9, 30, 60); drawSite(p.site, sx, sy, sz); if (z > 2.5) label(p.n, sx, sy + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else { cx.fillStyle = PAPER; cx.strokeStyle = '#2a251e'; cx.lineWidth = 1.2; cx.fillRect(sx - 3, sy - 3, 6, 6); cx.strokeRect(sx - 3, sy - 3, 6, 6); } }
+  if (z > .28) for (const p of POIS) { if (!g.found[p.id]) continue; const [sx, sy] = S2(p.x, p.y); if (sx < -40 || sy < -20 || sx > cw + 40 || sy > ch + 20) continue; if (z > 1.2) { const sz = clamp(z * 9, 30, 60); drawSite(p.site, sx, sy, sz); if (z > 2.5) label(p.n, sx, sy + sz * .5, INK, '500 10.5px "Golos Text", system-ui, sans-serif'); } else if (!drawArt(cx, 'm:' + (p.t === 'meteo' ? 'zimovye' : p.t), sx, sy, clamp(z * 22, 12, 24))) { cx.fillStyle = PAPER; cx.strokeStyle = '#2a251e'; cx.lineWidth = 1.2; cx.fillRect(sx - 3, sy - 3, 6, 6); cx.strokeRect(sx - 3, sy - 3, 6, 6); } }
   // ночь
   const dk = (1 - clamp(Math.sin((hour() - 6) / 15 * Math.PI), 0, 1)) * .45; if (dk > .01) { cx.fillStyle = `rgba(10,16,40,${dk})`; cx.fillRect(0, 0, cw, ch); }
   // маршрут, костёр, транспорт, игрок

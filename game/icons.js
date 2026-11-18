@@ -119,6 +119,7 @@ const ARTS = {
   b1: ['b:house', 'b:shop', 'b:pharmacy', 'b:hospital', 'b:garage', 'b:gas', 'b:warehouse', 'b:factory', 'b:police', 'b:military', 'b:school', 'b:station', 'b:hunting', 'b:izba', 'b:farm', 'b:sawmill'],
   b2: ['b:checkpoint', 'b:camp', 'b:zimovye', 'b:meteo', 'b:base', 't:forest', 't:taiga', 't:steppe', 't:tundra', 't:desert', 't:street', 't:river', 'x:wmoto', 'x:wcar', 'x:rad', 'x:sign'],
   ui: ['u:hp', 'u:food', 'u:water', 'u:warm', 'u:rad', 'u:mood', 'u:map', 'u:lens', 'u:pack', 'u:tent', 'u:hero', 'u:globe', 'u:ap', 'u:weight', 'u:coin', 'u:craft'],
+  md: ['m:c1', 'm:c2', 'm:c3', 'm:village', 'm:farm', 'm:gas', 'm:sawmill', 'm:checkpoint', 'm:camp', 'm:zimovye', 'm:put', 'm:gar', 'm:art', 'm:oboz', 'm:step', 'm:taiga'],
   h: ['h:0', 'h:1', 'h:2', 'h:3', 'h:4', 'h:5', 'h:6', 'h:7', 'h:8', 'h:9', 'h:10', 'h:11', 'h:12', 'h:13', 'h:14', 'h:15'],
   e2: ['e:rat', 'e:bigrat', 'e:mwolf', 'e:mboar', 'e:mbear', 'e:snake', 'e:spider', 'e:crow', 'e:elk', 'e:lynx', 'e:swarm', 'e:hare', 'e:alpha', 'e:catfish', 'e:bat', 'e:toad'],
   e: ['e:wolf', 'e:dog', 'e:mice', 'e:boar', 'e:bear', 'e:glowdog', 'e:burnt', 'e:marauder', 'e:gunman', 'e:deserter', 'e:oboz', 'e:rider', 'e:poacher', 'e:soldier', 'e:putguard', 'e:artguard']
