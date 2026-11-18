@@ -5,7 +5,7 @@
 /* Layout: the map is the page; a narrow panel (layer switch, selection, legend) sits beside it on wide screens and below it on phones. */
 :root{
   --bg:#f3f1ec; --panel:#ffffff; --fg:#1d1d1b; --muted:#6c6a64; --line:#d9d5cc; --accent:#b0281a;
-  --sea:#b3ddec; --sea-ink:#2f8fc9; --land:#ececea; --coast:#5b93ad; --edge:#55524b; --people:#7a1f1f;
+  --sea:#b3ddec; --sea-ink:#2f8fc9; --land:#f4f3ef; --coast:#5b93ad; --edge:#55524b; --people:#7a1f1f;
   --sans:"PT Sans","Segoe UI",system-ui,sans-serif; --serif:"PT Serif",Georgia,serif;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b1c1e; --panel:#24262a; --fg:#ecebe7; --muted:#a6a39c; --line:#3a3c40; --accent:#ff7a66; color-scheme:dark } }
@@ -19,7 +19,7 @@ h1{font-size:clamp(22px,2.6vw,30px);margin:0;font-weight:700}
 .sub{color:var(--muted);font-size:13px}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
 @media (max-width:940px){.wrap{grid-template-columns:minmax(0,1fr)}}
-.stage{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--sea);aspect-ratio:6840/4800;max-width:100%;min-width:0}
+.stage{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--sea);aspect-ratio:7340/4960;max-width:100%;min-width:0}
 .stage svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .stage svg:active{cursor:grabbing}
 .ctl{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:4px}
@@ -48,8 +48,8 @@ svg text{pointer-events:none;user-select:none}
 </style>
 <header>
   <h1>Карта 365 года</h1>
-  <div class="seg" role="group" aria-label="Слой карты"><button id="lP" aria-pressed="true">Политическая</button><button id="lC" aria-pressed="false">Контроль регионов</button></div>
-  <div class="sub">Регион → провинция → малая провинция → город. Регионы по карте Траяна, основа: карта Crusader Kings III. Колесо или щипок: масштаб.</div>
+  <div class="seg" role="group" aria-label="Слой карты"><button id="lP" aria-pressed="true">Политическая</button><button id="lC" aria-pressed="false">Контроль игроков</button></div>
+  <div class="sub">Империя → диоцез → провинция → малая провинция → город. Основа: карта Crusader Kings III. Колесо или щипок: масштаб.</div>
 </header>
 <div class="wrap">
   <div class="stage"><svg id="map" role="img" aria-label="Карта римского мира и соседей в 365 году"></svg>
@@ -80,7 +80,6 @@ const shape={}; Object.keys(M.rings).forEach(k=>shape[k]=M.rings[k].map(ringD).j
 const isCity=u=>u>=NSP, isWater=c=>c===-9||c===-5||c===-3;
 const provOf=u=>u<0?u:U[u].pv;
 const PCOL={}; M.players.forEach(p=>PCOL[p.n]=p.c);
-const WEST=new Set([1,2,3,14]);
 const mix=(c,p,b)=>`color-mix(in srgb, ${c} ${p}%, ${b||"#ffffff"})`;
 
 const svg=d3.select("#map").attr("viewBox",`0 0 ${M.W} ${M.H}`);
@@ -92,27 +91,27 @@ const pP=g.append("g").selectAll("path").data(provIds).join("path").attr("class"
 const pC=g.append("g").selectAll("path").data(cityIds).join("path").attr("class","u").attr("d",u=>shape[u]).attr("fill-rule","evenodd");
 g.append("path").attr("d",shape[-3]||"").attr("fill-rule","evenodd").style("fill","var(--sea)").attr("pointer-events","none");
 g.append("path").attr("d",shape[-5]||"").attr("fill-rule","evenodd").style("fill","var(--sea)").attr("pointer-events","none");
-let dSmall="",dProv="",dReg="",dRealm="",dPars="",dCoast="",dCity="",dCC="";
+let dSmall="",dProv="",dReg="",dRealm="",dCoast="",dCity="",dCC="",dEdge="";
 M.meta.forEach(([l,r],i)=>{ if(l===-2||r===-2) return; const a=arcD(A[i]);
   const wl=isWater(l), wr=isWater(r);
   if(wl||wr){ if(!(wl&&wr)) dCoast+=a; return; }
   if(isCity(l)&&isCity(r)) dCC+=a; else if(isCity(l)||isCity(r)) dCity+=a;
   const pl=provOf(l), pr=provOf(r);
   if(pl===pr){ if(!isCity(l)&&!isCity(r)) dSmall+=a; return; }
-  const rl=pl>=0?PV[pl].r:-1, rr=pr>=0?PV[pr].r:-1;
-  if(rl===rr){ dProv+=a; return; }
-  const el=rl>=0?R[rl].realm:null, er=rr>=0?R[rr].realm:null;
-  if(el!==er){ dRealm+=a; return; }
-  dReg+=a; if(el==="ROM" && WEST.has(R[rl].p)!==WEST.has(R[rr].p)) dPars+=a; });
+  if(pl<0||pr<0){ dEdge+=a; return; }                      // edge of the playable land
+  const el=PV[pl].realm, er=PV[pr].realm;
+  if(el!==er) dRealm+=a;                                   // political layer
+  const rl=pl>=0?PV[pl].r:-1, rr=pr>=0?PV[pr].r:-1;       // control layer
+  if(rl===rr) dProv+=a; else dReg+=a; });
 const B=g.append("g").attr("fill","none").attr("pointer-events","none").attr("stroke-linejoin","round").attr("stroke-linecap","round");
 const nss=s=>s.attr("vector-effect","non-scaling-stroke");
+nss(B.append("path").attr("d",dEdge).style("stroke","#8d877b").attr("stroke-width",.9));
 const bSmall=nss(B.append("path").attr("d",dSmall).style("stroke","#5f5a51").attr("stroke-width",.85).attr("stroke-dasharray","4 2.5").attr("stroke-opacity",.9));
 const bProv=nss(B.append("path").attr("d",dProv).style("stroke","#4f4b44").attr("stroke-width",1.1));
 const bCity=nss(B.append("path").attr("d",dCity).style("stroke","#3a2c20").attr("stroke-width",.9));
 const bCC=nss(B.append("path").attr("d",dCC).style("stroke","#fff8ec").attr("stroke-width",1.8));
 const bReg=nss(B.append("path").attr("d",dReg).style("stroke","#2b2823").attr("stroke-width",2.1));
-const bPars=nss(B.append("path").attr("d",dPars).style("stroke","#f3dcf0").attr("stroke-width",1.8).attr("stroke-dasharray","7 4"));
-nss(B.append("path").attr("d",dRealm).style("stroke","#221f1b").attr("stroke-width",2.3));
+const bRealm=nss(B.append("path").attr("d",dRealm).style("stroke","#221f1b").attr("stroke-width",1.9));
 nss(B.append("path").attr("d",dCoast).style("stroke","var(--coast)").attr("stroke-width",.9));
 const hl=nss(B.append("path").style("stroke","var(--accent)").attr("stroke-width",2.6).attr("fill-rule","evenodd"));
 // ---------- labels: fixed size on screen, placed in screen space, culled when they collide ----------
@@ -125,16 +124,16 @@ function addLabel(o){ o.el=LG.append("text").attr("text-anchor","middle").text(o
   if(o.halo) o.el.style("stroke",o.halo).attr("paint-order","stroke").attr("stroke-linejoin","round");
   labels.push(o); }
 M.seas.forEach(s=>addLabel({text:s.n,x:s.x,y:s.y,fs:s.big===2?17:(s.big>1?13.5:12.5),serif:1,italic:1,color:"var(--sea-ink)",sp:s.big===2?.2:(s.big>1?.14:.1),rot:s.rot,minK:s.big>1?1:1.7,layer:"B",prio:5e8}));
-Object.keys(RM).forEach(k=>{ const m=RM[k]; if(!m.a) return; const rom=k==="ROM";
-  addLabel({text:m.n,x:rom?M.W*0.335:m.a[0],y:rom?M.H*0.44:m.a[1],fs:rom?24:(m.ind?12.5:15),bold:1,color:rom?"#ffffff":(m.ind?"var(--people)":"#1f1d19"),
-            halo:rom?"#4a1247":"rgba(255,255,255,.7)",hw:rom?4:2.5,sp:rom?.12:.03,minK:1,layer:"P",prio:rom?1e12:1e9+m.A}); });
-R.forEach((r,i)=>{ if(!r.a) return; const rom=r.realm==="ROM";
-  addLabel({text:r.ru,x:r.a[0],y:r.a[1],fs:r.A>120000?14:12.5,color:rom?"#161512":"var(--people)",halo:"rgba(255,255,255,.75)",hw:2.5,minK:1,layer:"C",prio:1e9+r.A}); });
+Object.keys(RM).forEach(k=>{ const m=RM[k]; if(!m.a) return; const rom=k==="ROMW"||k==="ROME";
+  addLabel({text:m.n,x:m.a[0],y:m.a[1],fs:rom?19:(m.ind?12:15),bold:1,color:rom?"#ffffff":(m.ind?"var(--people)":"#1f1d19"),
+            halo:rom?"#3d1040":"rgba(255,255,255,.7)",hw:rom?4:2.5,sp:rom?.08:.03,minK:1,layer:"P",prio:rom?1e12:(m.ind?1e8:1e10)+m.A,fit:m.ind?Math.sqrt(m.A)*1.6:0,alt:1}); });
+R.forEach((r,i)=>{ if(!r.a) return;
+  addLabel({text:r.ru,x:r.a[0],y:r.a[1],fs:r.A>400000?14.5:13,bold:1,color:r.rom?"#161512":"var(--people)",halo:"rgba(255,255,255,.8)",hw:2.8,minK:1,layer:"C",prio:1e9+r.A,alt:1}); });
 PV.forEach((p,i)=>{ if(!p.a) return;
-  addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:11,italic:1,bold:1,color:"#34312b",halo:"rgba(255,255,255,.65)",hw:2.2,minK:1.9,layer:"C",prio:1e6+p.A,fit:Math.sqrt(p.A)}); });
+  addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:11,italic:1,color:"#2f2c27",halo:"rgba(255,255,255,.65)",hw:2.2,minK:1.7,layer:"C",prio:1e6+p.A,fit:Math.sqrt(p.A)}); });
 provIds.forEach(u=>{ const p=U[u]; if(!p.a) return;
   addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:9.5,color:"#5a554c",halo:"rgba(255,255,255,.55)",hw:1.8,minK:4.2,layer:"C",prio:1e4+p.A/100,fit:Math.sqrt(p.A)}); });
-const CMIN={1:1,2:1.9,3:3.1,4:4.6};
+const CMIN={1:1,2:1.7,3:3.4,4:5.4};
 cityIds.forEach(u=>{ const c=U[u]; if(!c.a) return;
   addLabel({text:c.n,x:c.a[0],y:c.a[1],fs:c.tier===1?12.5:11,bold:1,color:"#24180e",halo:"rgba(255,255,255,.9)",hw:3,minK:CMIN[c.tier],layer:"C",
             prio:(c.tier<=2?2e9:5e5)-c.tier*1e5,above:Math.sqrt(c.A/Math.PI)}); });
@@ -159,7 +158,10 @@ function layout(){ raf=0;
     let w=o.w*px, h=o.fs*px, bx;
     if(o.rot){ const c=Math.abs(Math.cos(o.rot*Math.PI/180)), s=Math.abs(Math.sin(o.rot*Math.PI/180)); const ww=w*c+h*s, hh=w*s+h*c; bx=[x-ww/2,y-hh/2,x+ww/2,y+hh/2]; }
     else bx=[x-w/2-2*px,y-h*.85,x+w/2+2*px,y+h*.3];
-    if(hit(bx)) continue; boxes.push(bx); o.show=true; o.sx=x; o.sy=y;
+    if(!o.rot){ const nx=Math.max(w/2+6*px,Math.min(M.W-w/2-6*px,x)); bx[0]+=nx-x; bx[2]+=nx-x; x=nx; }
+    let placed=!hit(bx);
+    if(!placed && o.alt){ for(const dy of [-1.5,1.5,-3,3]){ const b2=[bx[0],bx[1]+dy*h,bx[2],bx[3]+dy*h]; if(!hit(b2)){ bx=b2; y+=dy*h; placed=true; break; } } }
+    if(!placed) continue; boxes.push(bx); o.show=true; o.sx=x; o.sy=y;
   }
   labels.forEach(o=>{ if(!o.show){ o.el.attr("display","none"); return; }
     o.el.attr("display",null).attr("x",o.sx).attr("y",o.sy).attr("font-size",o.fs*px).attr("stroke-width",o.halo?(o.hw||2.5)*px:null)
@@ -167,20 +169,21 @@ function layout(){ raf=0;
 }
 const ask=()=>{ if(!raf) raf=requestAnimationFrame(layout); };
 function fillOf(u){
-  const r=R[U[u].r], city=isCity(u);
-  if(layer==="P") return RM[r.realm].c;
+  const pv=PV[U[u].pv], city=isCity(u);
+  if(layer==="P") return RM[pv.realm].c;
   const dark={1:62,2:72,3:84,4:92}[U[u].tier];                 // the bigger the city, the darker its fill
-  if(!r.p) return city?"#bdb7a8":"#e2dfd6";
-  return city?mix(PCOL[r.p],dark,"#24140a"):mix(PCOL[r.p],46);
+  if(!pv.p) return city?"#bdb7a8":"#e2dfd6";
+  return city?mix(PCOL[pv.p],dark,"#24140a"):mix(PCOL[pv.p],46);
 }
 function applyLayer(){
   // each shape is also stroked in its own colour, so no hairline seams show between neighbours of one colour
   [pP,pC].forEach(s=>s.style("fill",fillOf).style("stroke",fillOf).attr("stroke-width",.9).attr("vector-effect","non-scaling-stroke"));
   const pol=layer==="P";
-  [bSmall,bProv,bReg,bCity,bCC].forEach(b=>b.attr("display",pol?"none":null)); bPars.attr("display",pol?null:"none");
+  [bSmall,bProv,bReg,bCity,bCC].forEach(b=>b.attr("display",pol?"none":null)); bRealm.attr("display",pol?null:"none");
   document.getElementById("lP").setAttribute("aria-pressed",pol); document.getElementById("lC").setAttribute("aria-pressed",!pol);
   legend(); layout();
 }
+document.querySelector(".stage").style.aspectRatio=M.W+"/"+M.H;
 const zoom=d3.zoom().scaleExtent([1,28]).translateExtent([[0,0],[M.W,M.H]]).on("zoom",e=>{ T=e.transform; g.attr("transform",T); ask(); });
 svg.call(zoom); addEventListener("resize",ask); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ labels.forEach(o=>o.w=0); ask(); });
 document.getElementById("zin").onclick=()=>svg.transition().duration(250).call(zoom.scaleBy,1.6);
@@ -189,19 +192,20 @@ document.getElementById("zreset").onclick=()=>svg.transition().duration(350).cal
 document.getElementById("lP").onclick=()=>{layer="P";applyLayer();}; document.getElementById("lC").onclick=()=>{layer="C";applyLayer();};
 // ---------- selection ----------
 const citiesIn={}; cityIds.forEach(u=>(citiesIn[U[u].pv]=citiesIn[U[u].pv]||[]).push(U[u].n));
-const smallIn={}; provIds.forEach(u=>smallIn[U[u].pv]=(smallIn[U[u].pv]||0)+1);
+const smallIn={}; provIds.forEach(u=>(smallIn[U[u].pv]=smallIn[U[u].pv]||[]).push(U[u].n));
 const provsIn={}; PV.forEach(p=>(provsIn[p.r]=provsIn[p.r]||[]).push(p.n));
 let sel=null;
 function show(u){
-  hl.attr("d",shape[u]); const un=U[u], pv=PV[un.pv], rg=R[un.r], rm=RM[rg.realm], p=rg.p?M.players.find(x=>x.n===rg.p):null, city=isCity(u);
+  hl.attr("d",shape[u]); const un=U[u], pv=PV[un.pv], rg=R[pv.r], rm=RM[pv.realm], p=pv.p?M.players.find(x=>x.n===pv.p):null, city=isCity(u);
   const cs=citiesIn[un.pv]||[];
   document.getElementById("info").innerHTML=`<p class="eyebrow">${city?"Город · "+un.rank:"Малая провинция"}</p><p class="name">${un.n}</p>
-   <dl class="kv"><dt>Провинция</dt><dd>${pv.n} <span style="color:var(--muted)">· малых: ${smallIn[un.pv]||0}</span></dd>
-   <dt>Регион</dt><dd>${rg.ru}</dd>
+   <dl class="kv"><dt>Провинция</dt><dd>${pv.n}</dd>
+   <dt>${rg.rom?"Диоцез":"Область"}</dt><dd>${rg.ru}</dd>
+   ${rg.macro!==rg.ru?`<dt>${rg.rom?"Империя":"Раздел"}</dt><dd>${rg.macro}</dd>`:""}
    <dt>Держава</dt><dd><span class="sw" style="background:${rm.c}"></span>${rm.n}</dd>
    <dt>Игрок</dt><dd>${p?`<span class="sw" style="background:${p.c}"></span>№${p.n} ${p.name}`:"нет"}</dd>
    <dt>Города</dt><dd>${cs.length?cs.join(", "):"—"}</dd>
-   <dt>В регионе</dt><dd>${(provsIn[un.r]||[]).join(", ")}</dd></dl>`;
+   <dt>Малые</dt><dd>${(smallIn[un.pv]||[]).join(", ")}</dd></dl>`;
 }
 [pP,pC].forEach(s=>s.on("pointerenter",(e,u)=>show(u)).on("pointerleave",()=>{ if(sel!==null) show(sel); else hl.attr("d",""); }).on("click",(e,u)=>{sel=u;show(u);}));
 function legend(){
@@ -211,14 +215,14 @@ function legend(){
     Object.keys(RM).filter(k=>!RM[k].ind).forEach(k=>{ const li=document.createElement("li");
       li.innerHTML=`<span class="sw" style="width:18px;height:14px;background:${RM[k].c}"></span><span>${RM[k].n}</span>`; ul.appendChild(li); });
     { const li=document.createElement("li"); li.innerHTML=`<span class="sw" style="width:18px;height:14px;background:#d6d3cc"></span><span>Независимые народы и царства</span>`; ul.appendChild(li); }
-    document.getElementById("lgN").textContent="Каждая держава залита целиком, без внутренних границ. Светлый пунктир в империи: раздел между Валентинианом и Валентом.";
+    document.getElementById("lgN").textContent="Каждая держава залита целиком, без внутренних границ. Народы без общего царя показаны по отдельности.";
   } else {
-    document.getElementById("lgT").textContent="Игроки и их регионы";
+    document.getElementById("lgT").textContent="Игроки и их земли";
     M.players.forEach(p=>{ const li=document.createElement("li");
-      li.innerHTML=`<span class="dot" style="background:${p.c}">${p.n}</span><span>${p.name}<small>${p.regions.length?p.regions.join(", "):(p.secret?"тайное убежище, регионов нет":"регионов нет")}</small></span>`; ul.appendChild(li); });
-    document.getElementById("lgN").textContent="Жирная линия: регион. Тонкая сплошная: провинция. Пунктир: малая провинция. Тёмное пятно: город. Серые регионы без игрока.";
+      li.innerHTML=`<span class="dot" style="background:${p.c}">${p.n}</span><span>${p.name}<small>${p.regions.length?p.regions.join(", "):(p.secret?"тайное убежище, земель нет":"земель нет")}</small></span>`; ul.appendChild(li); });
+    document.getElementById("lgN").textContent="Жирная линия: диоцез или область. Тонкая сплошная: провинция. Пунктир: малая провинция. Тёмное пятно: город. Серые земли без игрока.";
   }
 }
-document.getElementById("info").innerHTML=`<p class="eyebrow">Подсказка</p><p class="name">Наведите на карту</p><p class="note">Клик закрепляет выбор. В слое «Контроль регионов» при приближении появляются провинции, малые провинции и города.</p>`;
+document.getElementById("info").innerHTML=`<p class="eyebrow">Подсказка</p><p class="name">Наведите на карту</p><p class="note">Клик закрепляет выбор. В слое «Контроль игроков» при приближении появляются провинции, малые провинции и города.</p>`;
 applyLayer();
 </script>

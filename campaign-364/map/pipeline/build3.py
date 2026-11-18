@@ -1,8 +1,10 @@
 import sys, os, json, re, csv, numpy as np, subprocess, struct, math
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-exec(open('regions_all.py').read()); exec(open('model.py').read())
+exec(open('world.py').read())
 CK='../ck3/'; KD='/home/user/ck3src/The-Kingdom-of-Heaven/'
-A=json.load(open(CK+'assign.json')); X0,X1,Y0,Y1=A['crop']; creg=A['creg']; cityb=A['cityb']
+A=json.load(open('assign3.json')); X0,X1,Y0,Y1=A['crop']; creg=A['creg']; cityb=A['cityb']; BCO={int(k):v for k,v in A['bcounty'].items()}
+ckey=lambda p: BCO.get(p,bar[p]['c'])
+TIER={c['n']:c['t'] for c in CITIES}; tier=lambda n:TIER[n]
 pid=np.load(CK+'pid.npy')[Y0:Y1,X0:X1].astype(np.int32); H,W=pid.shape
 bar={int(k):v for k,v in json.load(open(CK+'titles.json')).items()}
 rows=[r for r in csv.reader(open(KD+'map_data/definition.csv',encoding='utf-8-sig',errors='replace'),delimiter=';') if r and r[0].strip().isdigit()]
@@ -26,7 +28,7 @@ def log(*a): print(*a,file=sys.stderr)
 # ---------- counties ----------
 cix={}; lut=np.full(max(ids)+1,-1,np.int32); kl=np.zeros(max(ids)+1,np.int8)
 for p in ids:
-    if KIND[p]=='l': lut[p]=cix.setdefault(bar[p]['c'],len(cix))
+    if KIND[p]=='l': lut[p]=cix.setdefault(ckey(p),len(cix))
     kl[p]={'l':0,'s':1,'k':2,'r':3,'w':4}[KIND[p]]
 cname=list(cix); NC=len(cname)
 CN=lut[pid]; KL=kl[pid]
@@ -96,30 +98,10 @@ while un:
         if best is None: break
         cr[best[1]]=best[2]; todo.discard(best[1])
 log('pockets absorbed',pockets)
-# ---------- provinces ----------
-RNAME=[R_[0] for R_ in REGALL]
-citycounty={nm:cix[bar[p]['c']] for nm,p in cityb.items()}
-PROV=[]; pv=np.full(NC,-1)
-for r,R_ in enumerate(REGALL):
-    cs=np.nonzero(cr==r)[0]
-    if len(cs)==0: log('EMPTY list item',R_[0]); continue
-    subs=SUB.get(R_[0])
-    if not subs:
-        PROV.append({'n':DISPLAY.get(R_[0],R_[0]),'r':r}); pv[cs]=len(PROV)-1; continue
-    apts=[]; aown=[]
-    for k,(nm,anc) in enumerate(subs):
-        for a in anc:
-            if isinstance(a,str): c=citycounty[a[1:]]; apts.append((ccx[c],ccy[c]))
-            else: q=fwd([a[0]],[a[1]])[0]; apts.append((q[0],q[1]))
-            aown.append(k)
-    apts=np.array(apts); aown=np.array(aown); base=len(PROV)
-    for nm,_ in subs: PROV.append({'n':nm,'r':r})
-    d=((ccx[cs][:,None]-apts[None,:,0])**2+(ccy[cs][:,None]-apts[None,:,1])**2)
-    pv[cs]=base+aown[d.argmin(1)]
-    for k,(nm,anc) in enumerate(subs):          # a city's county always stays in its named province
-        for a in anc:
-            if isinstance(a,str) and cr[citycounty[a[1:]]]==r: pv[citycounty[a[1:]]]=base+k
-NPV=len(PROV)
+# ---------- provinces: straight from the county assignment ----------
+citycounty={nm:cix[ckey(p)] for nm,p in cityb.items()}
+pv=cr.copy(); NPV=len(PROV)
+for nm,c in citycounty.items(): pv[c]=[x['pv'] for x in CITIES if x['n']==nm][0]
 def comps_of(p):
     cs=set(np.nonzero(pv==p)[0].tolist()); out=[]
     while cs:
@@ -131,40 +113,30 @@ def comps_of(p):
         out.append(comp)
     return out
 locked=set(citycounty.values())
-for rnd in range(4):
+for rnd in range(5):                      # a detached piece joins the neighbour it borders most (same diocese preferred)
     moved=0
     for p in range(NPV):
         cc=comps_of(p)
         if len(cc)<=1: continue
-        cc.sort(key=lambda c:-sum(carea[x] for x in c))
+        cc.sort(key=lambda c:(-any(x in locked for x in c),-sum(carea[x] for x in c)))
         for comp in cc[1:]:
             if any(x in locked for x in comp): continue
             v={}
             for x in comp:
                 for q,w in adj[x].items():
-                    if pv[q]>=0 and pv[q]!=p and PROV[pv[q]]['r']==PROV[p]['r']: v[pv[q]]=v.get(pv[q],0)+w
+                    if pv[q]>=0 and pv[q]!=p: v[pv[q]]=v.get(pv[q],0)+w*(3 if PROV[pv[q]]['dio']==PROV[p]['dio'] else 1)
             if v:
                 t=max(v,key=v.get)
                 for x in comp: pv[x]=t
                 moved+=1
     if not moved: break
-# tiny sub-provinces merge into a sibling
 parea=np.bincount(pv[pv>=0],weights=carea[pv>=0],minlength=NPV)
-for p in np.argsort(parea):
-    if parea[p]==0 or parea[p]>=2200: continue
-    v={}
-    for x in np.nonzero(pv==p)[0]:
-        for q,w in adj[x].items():
-            if pv[q]>=0 and pv[q]!=p and PROV[pv[q]]['r']==PROV[p]['r']: v[pv[q]]=v.get(pv[q],0)+w
-    if v:
-        t=max(v,key=v.get); log('merge small',PROV[p]['n'],'->',PROV[t]['n']); parea[t]+=parea[p]; parea[p]=0; pv[pv==p]=t
-alive=[p for p in range(NPV) if (pv==p).any()]; rm=np.full(NPV,-1); rm[alive]=np.arange(len(alive))
-pv=np.where(pv>=0,rm[np.maximum(pv,0)],-1); PROV=[PROV[p] for p in alive]; NPV=len(PROV)
-log('provinces',NPV)
+log('provinces',NPV,'| without land:',[PROV[p]['n'] for p in range(NPV) if parea[p]==0])
+log('smallest provinces:',sorted([(int(parea[p]),PROV[p]['n']) for p in range(NPV)])[:12])
 # ---------- small provinces: CK3 duchies inside each province ----------
 cduchy=[None]*NC
 for p in ids:
-    if KIND[p]=='l': cduchy[cix[bar[p]['c']]]=bar[p]['d']
+    if KIND[p]=='l': cduchy[cix[ckey(p)]]=bar[p]['d']
 sp=np.full(NC,-1); SPL=[]; key2={}
 for c in range(NC):
     if pv[c]<0 or carea[c]==0: continue
@@ -219,18 +191,21 @@ def dil(m,r):
 def label_win(m):
     hh,ww=m.shape
     return np.frombuffer(subprocess.run(['./label',str(ww),str(hh)],input=m.astype(np.uint8).tobytes(),capture_output=True).stdout,dtype=np.int32).reshape(hh,ww)
-FACE={'Athenae':(1,-1),'Nova Roma':(0.4,1),'Carthago':(0,1),'Syracusae':(0,1),'Neapolis':(1,-0.6),'Thessalonica':(1,0),'Dyrrachium':(0,-1),
- 'Tingis':(-1,0),'Aquileia':(1,0),'Ravenna':(0,1),'Brundisium':(0,1),'Hadrumetum':(0,1),'Leptis Magna':(-1,0),'Salona':(1,-1),'Tarraco':(1,1),
- 'Carthago Nova':(1,0),'Malaca':(1,0),'Olisipo':(1,-0.3),'Bononia':(0,-1),'Dubris':(0.5,1),'Patrae':(-1,-1),'Corinthus':(-1,0),'Panormus':(-1,0),
- 'Caralis':(1,0),'Aleria':(0,1),'Hippo Regius':(-1,0),'Iol Caesarea':(-1,0),'Narbo Martius':(1,1),'Ostia':(1,-1),'Nicopolis':(0.5,-1),'Rhegium':(0,-1),
- 'Ancona':(0,1),'Pisae':(0,-1),'Valentia':(0,1),'Palma':(1,-0.5)}
-SEA_PULL={'Roma'}       # grows toward the sea: scaled about its point farthest from the coast
+FACE={'Афины':(1,-1),'Константинополь':(0.4,1),'Карфаген':(0,1),'Сиракузы':(0,1),'Неаполь':(1,-0.6),'Фессалоники':(1,0),'Диррахий':(0,-1),
+ 'Тингис':(-1,0),'Аквилея':(1,0),'Равенна':(0,1),'Брундизий':(0,1),'Гадрумет':(0,1),'Лептис Магна':(-1,0),'Салона':(1,-1),'Тарракон':(1,1),
+ 'Новый Карфаген':(1,0),'Малак':(1,0),'Олисипо':(1,-0.3),'Гесориак':(0,-1),'Патры':(-1,-1),'Коринф':(-1,0),'Панорм':(-1,0),'Каралис':(1,0),
+ 'Алерия':(0,1),'Гиппон Регий':(-1,0),'Иол-Кесарея':(-1,0),'Нарбона':(1,1),'Остий':(1,-1),'Никополь':(0.5,-1),'Регий':(0,-1),'Анкона':(0,1),
+ 'Пиза':(0,-1),'Валентия':(0,1),'Пальма':(1,-0.5),'Александрия':(-1,0),'Массилия':(1,0),'Генуя':(1,0),'Эфес':(0,-1),'Смирна':(0,-1),
+ 'Никомедия':(0.5,-1),'Халкидон':(0,-1),'Трапезунд':(-1,0),'Синоп':(-1,0),'Тир':(0,-1),'Берит':(0,-1),'Сидон':(0,-1),'Кесария Приморская':(0,-1),
+ 'Газа':(0,-1),'Лаодикея Сирийская':(0,-1),'Тарент':(1,-0.5),'Салерн':(1,-0.5),'Гадес':(0,-1),'Херсонес':(0.5,-1),'Пантикапей':(0,1),'Томы':(0,1),
+ 'Кизик':(-1,0),'Гераклея':(1,0),'Амастрида':(-1,0),'Фасис':(0,-1),'Чола':(0,1)}
+SEA_PULL={'Рим'}       # grows toward the sea: scaled about its point farthest from the coast
 report=[]
 order=sorted(range(len(cnames)),key=lambda i:(-tier(cnames[i]),cnames[i]))
 for ci in order:
     nm=cnames[ci]; p=cityb[nm]; target=TIER_AREA[tier(nm)]
     by,bx=np.nonzero(pid==p); a0=len(by)
-    prov=int(pv[cix[bar[p]['c']]])
+    prov=int(pv[cix[ckey(p)]])
     M=45; y0,y1,x0,x1=max(0,by.min()-M),min(H,by.max()+M+1),max(0,bx.min()-M),min(W,bx.max()+M+1)
     B=(pid[y0:y1,x0:x1]==p); KLw=KL[y0:y1,x0:x1]
     nb=lambda m:(np.roll(m,1,0)|np.roll(m,-1,0)|np.roll(m,1,1)|np.roll(m,-1,1))
@@ -293,11 +268,23 @@ for t in (1,2,3,4):
     xs_=[r_[3] for r_ in report if r_[1]==t]; log('tier',t,len(xs_),'area min/med/max',min(xs_),int(np.median(xs_)),max(xs_))
 log('off-target:',[(r_[0],r_[3]) for r_ in report if abs(r_[3]-TIER_AREA[r_[1]])>0.2*TIER_AREA[r_[1]]])
 U2=SP2.copy(); mc=CITY>=0; U2[mc]=NSP+CITY[mc]
-np.save('U2.npy',U2)
-RKEYS=list(REGIONS)
+np.save('U3.npy',U2)
 def pretty(t): return ' '.join(w.capitalize() for w in t[2:].split('_')) if t else '—'
 json.dump({'K':K,'NPV':NPV,'NSP':NSP,'crop':[X0,X1,Y0,Y1],
-  'prov':[{'n':P['n'],'item':RNAME[P['r']],'reg':RKEYS.index(REGION_OF[RNAME[P['r']]])} for P in PROV],
-  'sp':[{'n':pretty(g['d']),'d':g['d'],'pv':g['pv'],'cy':float(np.average(ccy[sp==i],weights=carea[sp==i])),'cx':float(np.average(ccx[sp==i],weights=carea[sp==i])),'cs':[cname[c][2:] for c in np.nonzero(sp==i)[0]]} for i,g in enumerate(SPL)],
-  'cities':[{'n':nm,'pv':int(pv[cix[bar[cityb[nm]]['c']]]),'t':tier(nm)} for nm in cnames]},
-  open('build2.json','w'),ensure_ascii=False)
+  'sp':[{'d':pretty(g['d']),'pv':g['pv'],'cy':float(np.average(ccy[sp==i],weights=carea[sp==i])),'cx':float(np.average(ccx[sp==i],weights=carea[sp==i])),
+         'cs':[[cname[c][2:].split('#')[0],float(carea[c])] for c in np.nonzero(sp==i)[0]]} for i,g in enumerate(SPL)],
+  'cities':[{'n':nm,'pv':int(pv[cix[ckey(cityb[nm])]]),'t':tier(nm)} for nm in cnames],
+  'wrongprov':[nm for nm in cnames if int(pv[cix[ckey(cityb[nm])]])!=[x['pv'] for x in CITIES if x['n']==nm][0]]},
+  open('build3.json','w'),ensure_ascii=False)
+log('cities outside their province:',json.load(open('build3.json'))['wrongprov'])
+# preview
+from PIL import Image
+rng=np.random.default_rng(3); pal=rng.integers(140,235,(NPV,3)).astype(np.uint8)
+PRv=np.where(U2>=NSP,-7,PR2)
+rgb=np.zeros((H2,W2,3),np.uint8); rgb[:]=(174,224,242); rgb[PR2==-4]=(232,232,228)
+m=PR2>=0; rgb[m]=pal[PR2[m]]; rgb[U2>=NSP]=(110,25,25)
+bd=((U2!=np.roll(U2,1,0))|(U2!=np.roll(U2,1,1)))&(U2>=0); rgb[bd]=(120,120,120)
+bd=((PR2!=np.roll(PR2,1,0))|(PR2!=np.roll(PR2,1,1)))&(PR2>=0); rgb[bd]=(40,40,40)
+dio=np.array([p['dio'] for p in PROV]); DG=np.where(PR2>=0,dio[np.maximum(PR2,0)],-1)
+rb=((DG!=np.roll(DG,1,0))|(DG!=np.roll(DG,1,1)))&(DG>=0)&(np.roll(DG,1,0)>=0)&(np.roll(DG,1,1)>=0); rgb[dil(rb,2)]=(0,0,0)
+Image.fromarray(rgb).resize((W2//4,H2//4),Image.LANCZOS).save('b3_all.png')
