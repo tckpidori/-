@@ -356,6 +356,7 @@ h3.big::after{display:none}
   .heroimg{min-height:120px}
 }
 /* размеры: значки и ячейки компактнее */
+#nav{grid-template-columns:repeat(5,minmax(0,1fr))}
 .grid{grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px}
 .grid.small{grid-template-columns:repeat(auto-fill,minmax(50px,62px))}
 #sheet .cell,.card .cell{height:64px;padding-top:13px}
@@ -373,9 +374,6 @@ h3.big::after{display:none}
 .need b{font-size:14px}
 .need .nb{width:28px;height:3px}
 #clock{font-size:12px}
-#nav button{font-size:10px;padding:3px 2px 4px;flex-direction:row;justify-content:center;gap:6px}
-#nav button .nvi{width:22px;height:22px}
-#nav button .nvi svg{width:18px;height:18px;margin:2px}
 h2.loc{font-size:19px}
 .shead{font-size:13px;padding:2px 6px 2px 12px}
 .xbtn{width:28px;height:28px;font-size:12px}
@@ -388,7 +386,6 @@ h2.loc{font-size:19px}
   .cell .ic,.cell .ic svg{width:26px;height:26px}
   .stile .sic,.stile .sic svg{width:36px;height:36px}
   .banner{height:52px}
-  #nav button .nvi{width:20px;height:20px}
   .heroimg{min-height:100px}
 }
 </style>

@@ -47,7 +47,7 @@ function renderHud() {
 }
 function renderNav() {
   const bad = { place: Object.keys(groundHere()).length, camp: RECIPES.filter(r => !craftMiss(r).length).length, char: g.wounds.length + Object.keys(g.dis).length + g.perkPts };
-  $('#nav').innerHTML = [['map', 'mapf', 'Карта'], ['place', 'lens', 'Место'], ['inv', 'pack', 'Рюкзак'], ['camp', 'tent', 'Лагерь'], ['char', 'person', 'Герой'], ['world', 'globe', 'Мир']].map(n => `<button class="${scr === n[0] ? 'on' : ''}" data-act="scr" data-arg="${n[0]}"><span class="nvi">${art({ map: 'u:map', place: 'u:lens', inv: 'u:pack', camp: 'u:tent', char: 'u:hero', world: 'u:globe' }[n[0]]) || uiIcon(n[1])}</span><span>${n[2]}</span>${bad[n[0]] ? `<i class="bdg">${bad[n[0]]}</i>` : ''}</button>`).join('');
+  $('#nav').innerHTML = [['map', 'mapf', 'Карта'], ['place', 'lens', 'Место'], ['inv', 'pack', 'Рюкзак'], ['camp', 'tent', 'Лагерь'], ['char', 'person', 'Герой']].map(n => `<button class="${scr === n[0] ? 'on' : ''}" data-act="scr" data-arg="${n[0]}"><span class="nvi">${art({ map: 'u:map', place: 'u:lens', inv: 'u:pack', camp: 'u:tent', char: 'u:hero', world: 'u:globe' }[n[0]]) || uiIcon(n[1])}</span><span>${n[2]}</span>${bad[n[0]] ? `<i class="bdg">${bad[n[0]]}</i>` : ''}</button>`).join('');
 }
 function renderRoute() {
   const el = $('#route');
@@ -206,7 +206,7 @@ const TITLES = { place: 'Место', inv: 'Рюкзак', camp: 'Лагерь',
 function renderSheet(keep) {
   const sh = $('#sheet'); if (scr === 'map') { sh.hidden = true; sh.innerHTML = ''; return; }
   const old = keep ? [...sh.querySelectorAll('#sb, .pane')].map(e => e.scrollTop) : [];
-  const body = scr === 'place' ? renderPlace() : scr === 'inv' ? renderInv() : scr === 'camp' ? renderCamp() : `<div class="panes one"><div class="pane">${scr === 'char' ? renderChar() : renderWorld()}</div></div>`;
+  const body = scr === 'place' ? renderPlace() : scr === 'inv' ? renderInv() : scr === 'camp' ? renderCamp() : `<div class="panes one"><div class="pane">${renderChar()}${renderWorld()}</div></div>`;
   sh.hidden = false;
   sh.innerHTML = `<div class="shead"><span>${TITLES[scr]}</span><button class="xbtn" data-act="scr" data-arg="map" aria-label="Закрыть">✕</button></div><div id="sb">${body}</div>`;
   if (keep) [...sh.querySelectorAll('#sb, .pane')].forEach((e, i) => { if (old[i]) e.scrollTop = old[i]; });
