@@ -169,6 +169,35 @@ al=[g for g in range(len(SPL)) if (sp==g).any()]; rm2=np.full(len(SPL),-1); rm2[
 sp=np.where(sp>=0,rm2[np.maximum(sp,0)],-1); SPL=[SPL[g] for g in al]; NSP=len(SPL)
 sarea=np.bincount(sp[sp>=0],weights=carea[sp>=0],minlength=NSP)
 log('small provinces',NSP,'median area',int(np.median(sarea)),'min',int(sarea.min()),'max',int(sarea.max()))
+# ---------- small provinces proper: CK3 counties, tiny ones merged into a neighbour of the same province ----------
+ng=sp.copy(); NGL=SPL; NNG=NSP                      # the duchy groups above only give the small provinces their names
+cellc=np.nonzero((pv>=0)&(carea>0))[0]
+sp=np.full(NC,-1); sp[cellc]=np.arange(len(cellc))
+sa=np.zeros(len(cellc)); sa[sp[cellc]]=carea[cellc]
+MEDC=float(np.median(sa)); TINY=0.55*MEDC
+members={i:[int(c)] for i,c in enumerate(cellc)}
+for g in np.argsort(sa):
+    g=int(g)
+    if g not in members or sa[g]>=TINY: continue
+    v={}
+    for x in members[g]:
+        for q,w in adj[x].items():
+            t=sp[q]
+            if t>=0 and t!=g and pv[q]==pv[x]: v[t]=v.get(t,0)+w
+    if not v: continue
+    t=max(v,key=lambda k_:v[k_]/math.sqrt(sa[k_]))
+    for x in members[g]: sp[x]=t
+    members[t]+=members.pop(g); sa[t]+=sa[g]; sa[g]=0
+al=sorted(members); rm3=np.full(len(cellc),-1); rm3[al]=np.arange(len(al))
+sp=np.where(sp>=0,rm3[np.maximum(sp,0)],-1); NSP=len(al)
+CELLS=[]
+for i,g in enumerate(al):
+    cs=members[g]; big=max(cs,key=lambda c:carea[c]); w=carea[cs]
+    CELLS.append({'pv':int(pv[big]),'g':int(ng[big]),'cx':float(np.average(ccx[cs],weights=w)),'cy':float(np.average(ccy[cs],weights=w)),'A':float(w.sum())})
+sa2=np.array([c['A'] for c in CELLS])
+log('small provinces (cells)',NSP,'median area',int(np.median(sa2)),'p10',int(np.percentile(sa2,10)),'p90',int(np.percentile(sa2,90)),'min',int(sa2.min()),'max',int(sa2.max()))
+from collections import Counter as _C
+pc=_C(c['pv'] for c in CELLS); log('cells per province: min',min(pc.values()),'median',int(np.median(list(pc.values()))),'max',max(pc.values()),'| single-cell provinces:',[PROV[p]['n'] for p,n in pc.items() if n==1])
 # ---------- rasters at K ----------
 K=2
 PRn=np.where(CN>=0,pv[np.maximum(CN,0)],-1)
@@ -176,6 +205,43 @@ PRn=np.where(CN>=0,np.where(PRn>=0,PRn,-4),np.where(KL==1,-9,np.where(KL==2,-5,n
 PR2=np.repeat(np.repeat(PRn,K,0),K,1); H2,W2=PR2.shape
 SPn=np.where(CN>=0,sp[np.maximum(CN,0)],-1); SPn=np.where(SPn>=0,SPn,PRn).astype(np.int32)   # water and outside codes are shared
 SPn[(CN>=0)&(sp[np.maximum(CN,0)]<0)]=-4
+# oversized cells (steppe, desert) are cut along barony borders into parts of ordinary size
+isb=np.zeros(max(ids)+1,bool); isb[[p for p in ids if KIND[p]=='l']]=True
+flat_ok=isb[pid]
+bA=np.bincount(pid.ravel(),minlength=max(ids)+1).astype(float)
+bY=np.bincount(pid.ravel(),weights=ys.ravel(),minlength=max(ids)+1)/np.maximum(bA,1); bX=np.bincount(pid.ravel(),weights=xs.ravel(),minlength=max(ids)+1)/np.maximum(bA,1)
+rng_=np.random.default_rng(8); nsplit=0
+for ci_ in range(NSP):
+    A_=CELLS[ci_]['A']
+    if A_<2.2*MEDC: continue
+    k=max(2,int(round(A_/(1.5*MEDC))))
+    yy_,xx_=np.nonzero(SPn==ci_); y0,y1,x0,x1=yy_.min(),yy_.max()+1,xx_.min(),xx_.max()+1
+    m=(SPn[y0:y1,x0:x1]==ci_); pw=pid[y0:y1,x0:x1]
+    bs=np.unique(pw[m&flat_ok[y0:y1,x0:x1]])
+    if len(bs)<k: k=len(bs)
+    if k<2: continue
+    P_=np.stack([bY[bs],bX[bs]],1); w_=bA[bs]
+    cen=[int(np.argmax(w_))]; d=((P_-P_[cen[0]])**2).sum(1)
+    for _ in range(k-1): c_=int(d.argmax()); cen.append(c_); d=np.minimum(d,((P_-P_[c_])**2).sum(1))
+    C_=P_[cen].copy()
+    for _ in range(12):
+        l_=((P_[:,None]-C_[None])**2).sum(-1).argmin(1)
+        for j in range(k):
+            if (l_==j).any(): C_[j]=np.average(P_[l_==j],0,w_[l_==j])
+    l_=((P_[:,None]-C_[None])**2).sum(-1).argmin(1)
+    lutb=np.full(max(ids)+1,-1); lutb[bs]=l_
+    part=lutb[pw]                                    # barony pixels get their cluster
+    gy_,gx_=np.nonzero(m&(part<0))                   # absorbed mountains etc.: nearest cluster centre
+    if len(gy_): part[gy_,gx_]=((np.stack([gy_+y0,gx_+x0],1)[:,None]-C_[None])**2).sum(-1).argmin(1)
+    for j in range(1,k):
+        mm=m&(part==j)
+        if not mm.any(): continue
+        SPn[y0:y1,x0:x1][mm]=NSP+nsplit
+        CELLS.append({'pv':CELLS[ci_]['pv'],'g':CELLS[ci_]['g'],'cx':float(np.nonzero(mm)[1].mean()+x0),'cy':float(np.nonzero(mm)[0].mean()+y0),'A':float(mm.sum())}); nsplit+=1
+    m0=m&(part==0); CELLS[ci_].update(cx=float(np.nonzero(m0)[1].mean()+x0),cy=float(np.nonzero(m0)[0].mean()+y0),A=float(m0.sum()))
+NSP+=nsplit
+sa2=np.array([c['A'] for c in CELLS])
+log('after cutting big cells:',NSP,'median',int(np.median(sa2)),'p10',int(np.percentile(sa2,10)),'p90',int(np.percentile(sa2,90)),'max',int(sa2.max()))
 SP2=np.repeat(np.repeat(SPn,K,0),K,1)
 CITY=np.full((H2,W2),-1,np.int16)
 cnames=list(cityb)
@@ -271,8 +337,9 @@ U2=SP2.copy(); mc=CITY>=0; U2[mc]=NSP+CITY[mc]
 np.save('U3.npy',U2)
 def pretty(t): return ' '.join(w.capitalize() for w in t[2:].split('_')) if t else '—'
 json.dump({'K':K,'NPV':NPV,'NSP':NSP,'crop':[X0,X1,Y0,Y1],
-  'sp':[{'d':pretty(g['d']),'pv':g['pv'],'cy':float(np.average(ccy[sp==i],weights=carea[sp==i])),'cx':float(np.average(ccx[sp==i],weights=carea[sp==i])),
-         'cs':[[cname[c][2:].split('#')[0],float(carea[c])] for c in np.nonzero(sp==i)[0]]} for i,g in enumerate(SPL)],
+  'ng':[{'d':pretty(g['d']),'pv':g['pv'],'cy':float(np.average(ccy[ng==i],weights=carea[ng==i])),'cx':float(np.average(ccx[ng==i],weights=carea[ng==i])),
+         'cs':[[cname[c][2:].split('#')[0],float(carea[c])] for c in np.nonzero(ng==i)[0]]} for i,g in enumerate(NGL)],
+  'sp':CELLS,
   'cities':[{'n':nm,'pv':int(pv[cix[ckey(cityb[nm])]]),'t':tier(nm)} for nm in cnames],
   'wrongprov':[nm for nm in cnames if int(pv[cix[ckey(cityb[nm])]])!=[x['pv'] for x in CITIES if x['n']==nm][0]]},
   open('build3.json','w'),ensure_ascii=False)

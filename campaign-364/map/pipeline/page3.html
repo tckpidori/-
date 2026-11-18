@@ -106,11 +106,11 @@ M.meta.forEach(([l,r],i)=>{ if(l===-2||r===-2) return; const a=arcD(A[i]);
 const B=g.append("g").attr("fill","none").attr("pointer-events","none").attr("stroke-linejoin","round").attr("stroke-linecap","round");
 const nss=s=>s.attr("vector-effect","non-scaling-stroke");
 nss(B.append("path").attr("d",dEdge).style("stroke","#8d877b").attr("stroke-width",.9));
-const bSmall=nss(B.append("path").attr("d",dSmall).style("stroke","#5f5a51").attr("stroke-width",.85).attr("stroke-dasharray","4 2.5").attr("stroke-opacity",.9));
-const bProv=nss(B.append("path").attr("d",dProv).style("stroke","#4f4b44").attr("stroke-width",1.1));
+const bSmall=nss(B.append("path").attr("d",dSmall).style("stroke","#5d584f").attr("stroke-width",.7).attr("stroke-opacity",.75));
+const bProv=nss(B.append("path").attr("d",dProv).style("stroke","#3f3b35").attr("stroke-width",1.35));
 const bCity=nss(B.append("path").attr("d",dCity).style("stroke","#3a2c20").attr("stroke-width",.9));
 const bCC=nss(B.append("path").attr("d",dCC).style("stroke","#fff8ec").attr("stroke-width",1.8));
-const bReg=nss(B.append("path").attr("d",dReg).style("stroke","#2b2823").attr("stroke-width",2.1));
+const bReg=nss(B.append("path").attr("d",dReg).style("stroke","#1f1c18").attr("stroke-width",2.5));
 const bRealm=nss(B.append("path").attr("d",dRealm).style("stroke","#221f1b").attr("stroke-width",1.9));
 nss(B.append("path").attr("d",dCoast).style("stroke","var(--coast)").attr("stroke-width",.9));
 const hl=nss(B.append("path").style("stroke","var(--accent)").attr("stroke-width",2.6).attr("fill-rule","evenodd"));
@@ -132,7 +132,7 @@ R.forEach((r,i)=>{ if(!r.a) return;
 PV.forEach((p,i)=>{ if(!p.a) return;
   addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:11,italic:1,color:"#2f2c27",halo:"rgba(255,255,255,.65)",hw:2.2,minK:1.7,layer:"C",prio:1e6+p.A,fit:Math.sqrt(p.A)}); });
 provIds.forEach(u=>{ const p=U[u]; if(!p.a) return;
-  addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:9.5,color:"#5a554c",halo:"rgba(255,255,255,.55)",hw:1.8,minK:4.2,layer:"C",prio:1e4+p.A/100,fit:Math.sqrt(p.A)}); });
+  addLabel({text:p.n,x:p.a[0],y:p.a[1],fs:9,color:"#5a554c",halo:"rgba(255,255,255,.5)",hw:1.6,minK:5.5,layer:"C",prio:1e4+p.A/100,fit:Math.sqrt(p.A)}); });
 const CMIN={1:1,2:1.7,3:3.4,4:5.4};
 cityIds.forEach(u=>{ const c=U[u]; if(!c.a) return;
   addLabel({text:c.n,x:c.a[0],y:c.a[1],fs:c.tier===1?12.5:11,bold:1,color:"#24180e",halo:"rgba(255,255,255,.9)",hw:3,minK:CMIN[c.tier],layer:"C",
@@ -205,7 +205,7 @@ function show(u){
    <dt>Держава</dt><dd><span class="sw" style="background:${rm.c}"></span>${rm.n}</dd>
    <dt>Игрок</dt><dd>${p?`<span class="sw" style="background:${p.c}"></span>№${p.n} ${p.name}`:"нет"}</dd>
    <dt>Города</dt><dd>${cs.length?cs.join(", "):"—"}</dd>
-   <dt>Малые</dt><dd>${(smallIn[un.pv]||[]).join(", ")}</dd></dl>`;
+   <dt>Малых провинций</dt><dd>${(smallIn[un.pv]||[]).length}</dd></dl>`;
 }
 [pP,pC].forEach(s=>s.on("pointerenter",(e,u)=>show(u)).on("pointerleave",()=>{ if(sel!==null) show(sel); else hl.attr("d",""); }).on("click",(e,u)=>{sel=u;show(u);}));
 function legend(){
@@ -220,7 +220,7 @@ function legend(){
     document.getElementById("lgT").textContent="Игроки и их земли";
     M.players.forEach(p=>{ const li=document.createElement("li");
       li.innerHTML=`<span class="dot" style="background:${p.c}">${p.n}</span><span>${p.name}<small>${p.regions.length?p.regions.join(", "):(p.secret?"тайное убежище, земель нет":"земель нет")}</small></span>`; ul.appendChild(li); });
-    document.getElementById("lgN").textContent="Жирная линия: диоцез или область. Тонкая сплошная: провинция. Пунктир: малая провинция. Тёмное пятно: город. Серые земли без игрока.";
+    document.getElementById("lgN").textContent="Жирная линия: диоцез или область. Средняя: провинция. Тонкая: малая провинция. Тёмное пятно: город. Серые земли без игрока.";
   }
 }
 document.getElementById("info").innerHTML=`<p class="eyebrow">Подсказка</p><p class="name">Наведите на карту</p><p class="note">Клик закрепляет выбор. В слое «Контроль игроков» при приближении появляются провинции, малые провинции и города.</p>`;

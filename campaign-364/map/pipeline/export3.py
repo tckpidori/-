@@ -69,7 +69,15 @@ seas=[{'n':s[0],'x':round(float(p[0]),1),'y':round(float(p[1]),1),'big':s[3],'ro
 for s_ in seas:
     if s_['n'].startswith('Атлант'): q=fwd([44.3],[-10.3])[0]; s_.update(x=round(float(q[0]),1),y=round(float(q[1]),1))
 old=json.load(open('../v2/build2.json'))['sp']
-snames,fixed=small_names(B,PROV,NAMES,old,(1300,1430))
+gnames,fixed=small_names({'sp':B['ng']},PROV,NAMES,old,(1300,1430))
+ROM=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX']
+bygroup={}
+for i,c in enumerate(B['sp']): bygroup.setdefault(c['g'],[]).append(i)
+snames=[None]*len(B['sp'])
+for g,ix in bygroup.items():
+    if len(ix)==1: snames[ix[0]]=gnames[g]; continue
+    ix.sort(key=lambda i:(round(B['sp'][i]['cy']/60),B['sp'][i]['cx']))        # numbered in reading order: north to south, west to east
+    for k,i in enumerate(ix): snames[i]=f"{gnames[g]} {ROM[k] if k<len(ROM) else k+1}"
 if fixed: print('auto-suffixed names:',fixed,file=sys.stderr)
 RANK={1:'столица',2:'имперский центр',3:'крупный город',4:'город'}
 units=[{'t':'p','n':snames[i],'pv':g['pv'],'a':ua.get(i),'A':int(uarea[i])} for i,g in enumerate(B['sp'])]
